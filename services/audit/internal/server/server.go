@@ -3,21 +3,57 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/ajamous/aether/pkg/hsmclient"
+	"github.com/ajamous/aether/services/audit/internal/anchor"
 	"github.com/ajamous/aether/services/audit/internal/chain"
 )
 
-type Server struct {
-	ledger chain.Backend
+// AnchorSigner bundles everything the /v1/anchor handler needs to
+// produce a SAS-SM-style signed timeline anchor (length, tail hash,
+// timestamp; ECDSA-SHA-256 over the DER encoding via hsm-broker).
+//
+// All fields must be set to enable signing; nil signer means
+// /v1/anchor returns an unsigned anchor — same shape minus the
+// signature. Lab default is unsigned to keep `make lab-up`
+// HSM-free.
+type AnchorSigner struct {
+	Broker *hsmclient.Client
+	KeyID  string
 }
 
-func New(l chain.Backend) *Server { return &Server{ledger: l} }
+type Server struct {
+	ledger chain.Backend
+	signer *AnchorSigner
+	logger *slog.Logger
+}
+
+// Config bundles the optional knobs. Pass nil for lab defaults.
+type Config struct {
+	Signer *AnchorSigner
+	Logger *slog.Logger
+}
+
+func New(l chain.Backend, cfgs ...Config) *Server {
+	srv := &Server{ledger: l, logger: slog.Default()}
+	for _, c := range cfgs {
+		if c.Signer != nil {
+			srv.signer = c.Signer
+		}
+		if c.Logger != nil {
+			srv.logger = c.Logger
+		}
+	}
+	return srv
+}
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
@@ -25,6 +61,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/events", s.handleList)
 	mux.HandleFunc("GET /v1/events/{seq}", s.handleGet)
 	mux.HandleFunc("GET /v1/verify", s.handleVerify)
+	mux.HandleFunc("GET /v1/anchor", s.handleAnchor)
 	mux.HandleFunc("GET /v1/health", s.handleHealth)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	return mux
@@ -118,6 +155,57 @@ func (s *Server) handleVerify(w http.ResponseWriter, _ *http.Request) {
 		status = http.StatusUnprocessableEntity
 	}
 	writeJSON(w, status, r)
+}
+
+// handleAnchor returns a timeline anchor for the audit chain.
+//
+// Lab default (no signer): JSON shape with length, tail_hash,
+// and timestamp.
+// Production (signer wired): same shape plus a base64-encoded
+// `signed_payload` (DER of the Anchor SEQUENCE) and `signature`
+// (DER ECDSA over SHA-256 of the signed_payload). Auditors verify
+// the signature against the published audit-anchor public key.
+//
+// Empty chain returns length=0 with an all-zero tail hash — the
+// same convention the chain itself uses for the first entry's
+// prev_hash.
+func (s *Server) handleAnchor(w http.ResponseWriter, r *http.Request) {
+	length := s.ledger.Len()
+	tail := make([]byte, sha256.Size)
+	if length > 0 {
+		e, err := s.ledger.Get(uint64(length))
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("read tail: %v", err))
+			return
+		}
+		tail = e.Hash
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+
+	resp := map[string]any{
+		"length":    length,
+		"tail_hash": anchor.HexHash(tail),
+		"timestamp": now.Format(time.RFC3339),
+	}
+
+	if s.signer != nil {
+		a := anchor.Anchor{
+			Timestamp: now,
+			Length:    int64(length),
+			TailHash:  tail,
+		}
+		signed, sig, err := anchor.Sign(r.Context(), s.signer.Broker, s.signer.KeyID, a)
+		if err != nil {
+			s.logger.Error("audit anchor sign failed", slog.String("err", err.Error()))
+			writeProblem(w, http.StatusInternalServerError, "sign failed")
+			return
+		}
+		resp["signed_payload"] = signed
+		resp["signature"] = sig
+		resp["signature_alg"] = "ECDSA-SHA-256"
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

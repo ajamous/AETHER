@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/ajamous/aether/pkg/hsmclient"
 	"github.com/ajamous/aether/services/audit/internal/chain"
 	"github.com/ajamous/aether/services/audit/internal/server"
 )
@@ -25,6 +26,11 @@ func run() error {
 	var (
 		listen = flag.String("listen", ":8447", "HTTP listen address")
 		pgURL  = flag.String("pg-url", "", "PostgreSQL URL; if empty, the in-memory ledger is used (lab default)")
+
+		// Signed timeline anchors for /v1/anchor (audit-retention.md).
+		// Both flags must be set to enable; lab default is unsigned.
+		hsmBroker = flag.String("hsm-broker", "", "HSM broker base URL (e.g. http://hsm-broker:8443); enables signed /v1/anchor responses")
+		anchorKey = flag.String("anchor-key", "audit-anchor-key", "HSM key ID for the audit anchor signing key")
 	)
 	flag.Parse()
 
@@ -50,10 +56,26 @@ func run() error {
 		logger.Info("audit using postgres ledger")
 	}
 
-	srv := server.New(backend)
+	cfg := server.Config{Logger: logger}
+	anchorMode := "unsigned"
+	if *hsmBroker != "" {
+		cfg.Signer = &server.AnchorSigner{
+			Broker: hsmclient.New(*hsmBroker),
+			KeyID:  *anchorKey,
+		}
+		anchorMode = fmt.Sprintf("hsm broker=%s key=%s", *hsmBroker, *anchorKey)
+	}
+
+	srv := server.New(backend, cfg)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	logger.Info("audit listening", slog.String("addr", *listen))
+	logger.Info("audit listening",
+		slog.String("addr", *listen),
+		slog.String("anchor", anchorMode),
+	)
+	if anchorMode == "unsigned" {
+		logger.Warn("/v1/anchor responses are UNSIGNED (no --hsm-broker); auditors must trust the recording medium")
+	}
 	return srv.ListenAndServe(ctx, *listen)
 }

@@ -9,6 +9,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Audit signed timeline anchors (`services/audit/internal/anchor/`,
+`/v1/anchor`):
+- The audit retention runbook (audit-retention.md) calls for a
+  daily cron that records `(length, tail_hash)` to the immutable
+  offsite bucket as a "timeline anchor". Until now the recording
+  was operator-trusted only — anyone with append rights to the
+  bucket could fabricate an anchor.
+- New `services/audit/internal/anchor/` package: an `Anchor`
+  ASN.1 SEQUENCE `{timestamp, length, tail_hash}` with DER
+  marshal/unmarshal and a `Sign` helper that hashes the DER
+  with SHA-256 and asks hsm-broker to ECDSA-sign with the
+  audit-anchor key. Same DER+SHA256+ECDSA pattern used by
+  smdp-plus and smds, kept as a separate package because the
+  audit anchor key has a distinct role + lifecycle from the
+  SM-DP+ identity hierarchy (rotated yearly on its own ceremony
+  cadence).
+- 4 unit tests cover the DER round-trip, every validate()
+  rejection (empty/short tail hash, negative length, zero
+  timestamp), and signing end-to-end through a fake hsm-broker
+  that returns a real ECDSA-P256 signature.
+- New `GET /v1/anchor` handler. Lab default: returns
+  `{length, tail_hash, timestamp}` JSON. Production
+  (`--hsm-broker` + `--anchor-key` set): same shape plus
+  `signed_payload` (DER) + `signature` (DER ECDSA) +
+  `signature_alg` ("ECDSA-SHA-256"). Empty chain returns
+  `length=0` with an all-zero tail hash — same convention the
+  chain itself uses for the first entry's prev_hash.
+- 2 server-level integration tests: lab mode returns no
+  signature fields; signed mode round-trips through a fake
+  hsm-broker, asserts the signed_payload DER-decodes to fields
+  matching the JSON, and verifies the ECDSA signature against
+  the broker's public key.
+- `cmd/audit` gains `--hsm-broker` + `--anchor-key` flags.
+  Server warns at startup when anchors are unsigned — same
+  explicit-default-off-with-warning pattern as the gateway's
+  mTLS, rate-limit, and OIDC gates.
+- audit-retention.md updated: the daily cron now fetches
+  `/v1/anchor` (instead of computing the anchor manually), and
+  the auditor's offline verification procedure is spelled out
+  (read signed_payload, SHA-256, ECDSA-Verify against the
+  published audit-anchor public key, replay against a fresh
+  Postgres restore).
+- 4 conformance harness cases added: DER round-trip, signing
+  end-to-end, lab unsigned response, signed response. 56 total
+  now (was 52).
+
+Status row updates:
+- `services/audit`: now lists "signed timeline anchors at
+  `/v1/anchor` (ECDSA-SHA-256 over DER-encoded `(timestamp,
+  length, tail_hash)` SEQUENCE; opt-in via `--hsm-broker`)".
+- audit README's status table gains the row.
+- Conformance harness: 52 → 56 cases.
+
 Gateway OpenAPI 3.1 spec (`services/gateway/api/v1/openapi.yaml`):
 - Hand-written OpenAPI 3.1 spec covering both gateway surfaces:
   `/gsma/rsp2/es2plus/*` (mTLS-gated, SGP.22 §5.4) and `/v1/*`

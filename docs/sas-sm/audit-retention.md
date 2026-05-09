@@ -104,11 +104,30 @@ a row in Postgres and confirms `Verify()` reports the right break.
 For the audit pack, schedule:
 
 - Hourly: `/v1/verify` from a monitor service. Page on `ok=false`.
-- Daily: a cron job that records the day's `length` and the
-  current tail `hash` to a file appended to your immutable bucket.
-  This creates an external timeline anchor — even if the entire
-  Postgres is rebuilt from scratch, you can prove what the chain
-  looked like on each day.
+- Daily: a cron job that fetches `/v1/anchor` and writes the
+  response to your immutable bucket. The anchor is a snapshot of
+  `(length, tail_hash, timestamp)`; production deployments
+  configure the audit service with `--hsm-broker` + `--anchor-key`
+  so the response also carries a DER-encoded `signed_payload` and
+  ECDSA-SHA-256 `signature` over it. The signing key is the
+  `audit-anchor-key` HSM key, separate from the SM-DP+ identity
+  hierarchy and rotated on its own ceremony cadence (typically
+  yearly).
+  
+  Auditors verify offline by:
+  1. Reading `signed_payload` from the bucketed anchor.
+  2. SHA-256-hashing it.
+  3. Running ECDSA-Verify against the published audit-anchor
+     public key (which the operator pins in the SAS-SM evidence
+     pack at the start of each accreditation cycle).
+  4. Re-running the chain against the recorded `length`/`tail_hash`
+     in a fresh Postgres restore from backup; the recomputed tail
+     hash MUST match the signed value.
+  
+  Even if the entire Postgres is rebuilt from scratch, the daily
+  signed anchor proves what the chain looked like on each day —
+  and the signature proves the audit service issued it, not an
+  attacker who later compromised the WORM bucket's append rights.
 
 ## Read access segregation
 

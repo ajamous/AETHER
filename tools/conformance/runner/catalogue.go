@@ -323,6 +323,30 @@ var catalogue = []Case{
 		Module: "services/audit", Package: "./internal/chain/...",
 		RunPattern: "^TestLedger_TamperDetected$",
 	},
+	{
+		Family: "Audit",
+		Title:  "Anchor DER round-trip preserves all fields",
+		Module: "services/audit", Package: "./internal/anchor/...",
+		RunPattern: "^TestAnchor_RoundTrip$",
+	},
+	{
+		Family: "Audit",
+		Title:  "Anchor signing end-to-end verifies against broker public key",
+		Module: "services/audit", Package: "./internal/anchor/...",
+		RunPattern: "^TestSign_VerifiesEndToEnd$",
+	},
+	{
+		Family: "Audit",
+		Title:  "/v1/anchor returns unsigned anchor in lab mode",
+		Module: "services/audit", Package: "./internal/server/...",
+		RunPattern: "^TestAudit_Anchor_LabUnsigned$",
+	},
+	{
+		Family: "Audit",
+		Title:  "/v1/anchor signed end-to-end (DER + ECDSA-SHA-256)",
+		Module: "services/audit", Package: "./internal/server/...",
+		RunPattern: "^TestAudit_Anchor_SignedEndToEnd$",
+	},
 
 	// -- Cert handling -------------------------------------------
 	{

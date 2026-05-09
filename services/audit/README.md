@@ -12,6 +12,7 @@ requirements.
 | In-memory hash-chained ledger                    | Implemented   |
 | HTTP API: append, list, verify                   | Implemented   |
 | Postgres-backed ledger                            | Implemented   |
+| Signed timeline anchors (`/v1/anchor`)           | Implemented (unsigned by default; opt-in HSM signing via `--hsm-broker` + `--anchor-key`. ECDSA-SHA-256 over DER-encoded Anchor SEQUENCE; auditors verify offline against the published audit-anchor public key. See [docs/sas-sm/audit-retention.md](../../docs/sas-sm/audit-retention.md)) |
 | NATS subscriber                                   | Not started   |
 | SSE streaming                                     | Not started   |
 | Full-text search                                  | Not started   |
