@@ -39,5 +39,5 @@ When a topology is `Implemented`, expect:
 - A list of known limitations
 
 If any of those are missing, the topology is not `Implemented` yet.
-See [philosophy principle 4](../../GOVERNANCE.md): no feature ships
+See [philosophy principle 4](https://github.com/ajamous/aether/blob/main/GOVERNANCE.md): no feature ships
 without operations documentation.

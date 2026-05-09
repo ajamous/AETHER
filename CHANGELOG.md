@@ -82,6 +82,50 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+SAS-SM evidence templates (`docs/sas-sm/`):
+- The first walkable preparation pack for an MVNO running through
+  SAS-SM accreditation. All free, in-repo, no paid tier — see
+  GOVERNANCE.md §"What this project commits to".
+- gap-analysis.md: every SAS-SM control family mapped to the
+  Aether feature that satisfies it, the operator-supplied
+  control needed to close the gap, and the evidence the auditor
+  will expect to see. Covers Security Policy, Sensitive Process,
+  Key Management, Network and Infrastructure, Audit and Logging,
+  Personnel, Incident Management, Business Continuity.
+- key-ceremony.md: a concrete, two-person-quorum HSM key-generation
+  procedure with time-stamped step list and a tear-out
+  chain-of-custody form ready to print. Documents what goes in
+  the audit pack and what NEVER does (PINs, private key bytes).
+- rbac.md: four documented roles (operator, key-custodian,
+  auditor, incident-responder) with ready-to-apply Kubernetes
+  Role manifests and the Postgres GRANT script that revokes
+  UPDATE/DELETE on audit_entries from the application role.
+  Quarterly review checklist.
+- audit-retention.md: catalogues what the platform logs by
+  default, the 3-year immutable retention default, the WORM
+  offsite-copy pattern (S3 Object Lock Compliance mode), the
+  hourly /v1/verify monitor, and the daily timeline-anchor
+  backup that creates an external integrity proof.
+- reference-aws.md: complete reference deployment topology for
+  AWS GSMA-certified regions — EKS + RDS Multi-AZ + CloudHSM
+  HA pair + S3 WORM bucket. Sample production Helm values,
+  observability and alert rules, backup and DR plan, cost
+  ballpark with CloudHSM as the dominant line item.
+- mkdocs.yml updated with the new pages.
+
+Status table: SAS-SM evidence templates moves from "Not started"
+to "Partial" with explicit notes about what landed (gap analysis,
+key ceremony, RBAC, audit retention, AWS reference) and what's
+still pending (GCP and on-prem reference deployments, common
+audit findings, recertification checklist, incident-response
+runbook, worked evidence packages from real audits).
+
+This is the section the philosophy doc explicitly identifies as
+the project's most powerful organic-marketing surface. The bar
+is "70%+ of evidence Aether-emitted, 30% guided by templates."
+We are partway up that hill; each subsequent piece tightens the
+gap.
+
 eIM service (Phase 4 — SGP.32):
 - New `services/eim` exposes the operator's IoT control plane: a
   device registry keyed by EID and a per-device command queue.
