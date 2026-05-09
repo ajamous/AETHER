@@ -79,6 +79,12 @@ var catalogue = []Case{
 		Module: "services/gateway", Package: "./internal/server/...",
 		RunPattern: "^TestGateway_MTLS_401CounterAdvances$",
 	},
+	{
+		Family: "ES2+",
+		Title:  "Rate limiter rejects after burst; admin paths bypass; counter advances",
+		Module: "services/gateway", Package: "./internal/server/...",
+		RunPattern: "^TestGateway_RateLimit_RejectsAfterBurst$",
+	},
 
 	// -- ES9+ ----------------------------------------------------
 	{

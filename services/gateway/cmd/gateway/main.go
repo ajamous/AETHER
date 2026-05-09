@@ -31,9 +31,16 @@ func run() error {
 		eim            = flag.String("eim", "http://eim:8449", "eim base URL")
 
 		// TLS / mTLS flags. All optional; lab default is plain HTTP.
-		tlsCert      = flag.String("tls-cert", "", "TLS server certificate (PEM); enables HTTPS")
-		tlsKey       = flag.String("tls-key", "", "TLS server private key (PEM); required with --tls-cert")
-		es2plusCAs   = flag.String("es2plus-client-ca", "", "PEM bundle of CAs whose client certs are accepted on /gsma/rsp2/es2plus/* (enables mTLS for ES2+)")
+		tlsCert    = flag.String("tls-cert", "", "TLS server certificate (PEM); enables HTTPS")
+		tlsKey     = flag.String("tls-key", "", "TLS server private key (PEM); required with --tls-cert")
+		es2plusCAs = flag.String("es2plus-client-ca", "", "PEM bundle of CAs whose client certs are accepted on /gsma/rsp2/es2plus/* (enables mTLS for ES2+)")
+
+		// Rate limiting on /gsma/rsp2/* paths. Disabled by default;
+		// pass both --rate-limit-rps > 0 and --rate-limit-burst >= 1
+		// to enable. Keyed by RemoteAddr (the source as seen by the
+		// gateway).
+		rateLimitRPS   = flag.Float64("rate-limit-rps", 0, "Steady-state requests/sec per source on /gsma/rsp2/*. 0 disables.")
+		rateLimitBurst = flag.Int("rate-limit-burst", 0, "Token-bucket burst size per source. 0 disables.")
 	)
 	flag.Parse()
 
@@ -50,6 +57,8 @@ func run() error {
 			KeyFile:             *tlsKey,
 			ES2PlusClientCAFile: *es2plusCAs,
 		},
+		RateLimitRPS:   *rateLimitRPS,
+		RateLimitBurst: *rateLimitBurst,
 	})
 	if err != nil {
 		return fmt.Errorf("init: %w", err)
@@ -66,9 +75,15 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	rateLimitMode := "disabled"
+	if *rateLimitRPS > 0 && *rateLimitBurst >= 1 {
+		rateLimitMode = fmt.Sprintf("%.1f rps per source / burst %d", *rateLimitRPS, *rateLimitBurst)
+	}
+
 	logger.Info("gateway listening",
 		slog.String("addr", *listen),
 		slog.String("mode", mode),
+		slog.String("rate_limit", rateLimitMode),
 		slog.String("profile_builder", *profileBuilder),
 		slog.String("smdp_plus", *smdpPlus),
 		slog.String("certmgr", *certmgr),
@@ -77,6 +92,9 @@ func run() error {
 	)
 	if mode == "HTTP (lab)" {
 		logger.Warn("ES2+ mTLS DISABLED (no --es2plus-client-ca); BSS clients are not authenticated")
+	}
+	if rateLimitMode == "disabled" {
+		logger.Warn("rate limiting DISABLED (set --rate-limit-rps and --rate-limit-burst); /gsma/rsp2/* has no per-source quota")
 	}
 	return srv.ListenAndServe(ctx, *listen)
 }

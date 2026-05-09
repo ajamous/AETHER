@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ajamous/aether/services/gateway/internal/metrics"
+	"github.com/ajamous/aether/services/gateway/internal/ratelimit"
 	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
 
@@ -40,6 +41,10 @@ type Server struct {
 	// surface drives the AetherES2PlusUnauthorizedSpike alert in
 	// deployments/observability/.
 	es2plusUnauthorized *metrics.LabeledCounter
+
+	// Rate limiter for /gsma/rsp2/* paths. Nil = disabled.
+	rateLimiter       *ratelimit.Limiter
+	rateLimitRejected *metrics.LabeledCounter
 }
 
 type Config struct {
@@ -51,6 +56,11 @@ type Config struct {
 
 	// TLS holds the listener configuration. Empty TLS means plain HTTP.
 	TLS tlsconf.Config
+
+	// Rate limiting for the public /gsma/rsp2/* surface. Both must
+	// be > 0 to enable; lab default is disabled.
+	RateLimitRPS   float64
+	RateLimitBurst int
 }
 
 // New constructs a Server. Returns an error if the TLS configuration
@@ -82,6 +92,13 @@ func New(cfg Config) (*Server, error) {
 			"reason",
 			"no_tls", "no_client_cert", "chain_invalid",
 		),
+		rateLimiter: ratelimit.New(cfg.RateLimitRPS, cfg.RateLimitBurst),
+		rateLimitRejected: metrics.NewLabeledCounter(
+			"aether_gateway_ratelimit_rejected_total",
+			"Count of 429 Too Many Requests responses on /gsma/rsp2/* by path class.",
+			"class",
+			"es2plus", "es9plus",
+		),
 	}, nil
 }
 
@@ -105,18 +122,22 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/eim/devices", s.proxy("eim", "/v1/devices"))
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
-	// Wrap in the ES2+ mTLS gate. When es2plusClientCAs is nil
-	// (mTLS disabled, lab default) this is a no-op pass-through;
-	// when populated it requires a verified client cert on
-	// /gsma/rsp2/es2plus/* and lets everything else through
-	// unchanged. The reporter callback increments per-reason 401
-	// counters that drive the AetherES2PlusUnauthorizedSpike alert.
-	return tlsconf.ES2PlusMTLSMiddleware(s.es2plusClientCAs, s.es2plusUnauthorized)(mux)
+	// Middleware order: rate limit FIRST, then mTLS gate. We want
+	// 429 responses to short-circuit the cert verification path so
+	// a flood of cert-less requests can't burn CPU on chain checks.
+	// Both middlewares are no-op pass-throughs when their config
+	// is unset (lab default).
+	mtls := tlsconf.ES2PlusMTLSMiddleware(s.es2plusClientCAs, s.es2plusUnauthorized)
+	rate := ratelimit.Middleware(s.rateLimiter, func(class string) {
+		s.rateLimitRejected.Inc(class)
+	})
+	return rate(mtls(mux))
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	s.es2plusUnauthorized.Write(w)
+	s.rateLimitRejected.Write(w)
 }
 
 // ListenAndServe runs the gateway. If the configured mode includes

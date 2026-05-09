@@ -19,7 +19,8 @@ Aether's API gateway. Single entry point for:
 | HTTPS listener                                   | Implemented (`--tls-cert` / `--tls-key`) |
 | mTLS for ES2+ (path-scoped)                      | Implemented (`--es2plus-client-ca`); `/v1/*` admin paths stay unchallenged |
 | OIDC auth                                        | Not started  |
-| Rate limiting / RBAC                             | Not started  |
+| Rate limiting (per-source token bucket on `/gsma/rsp2/*`) | Implemented (`--rate-limit-rps` + `--rate-limit-burst`); admin paths bypass; `aether_gateway_ratelimit_rejected_total{class}` on `/metrics` drives the AetherGatewayRateLimited alert |
+| RBAC                                             | Not started  |
 | OpenAPI 3 spec generation                        | Not started  |
 
 ## TLS / mTLS
@@ -49,6 +50,34 @@ gateway:
 
 Both Secrets are operator-supplied; the chart does not generate
 TLS material.
+
+## Rate limiting
+
+The public `/gsma/rsp2/*` surface is protected by a per-source-IP
+token-bucket limiter, configured via two flags:
+
+```
+--rate-limit-rps <float>    steady-state requests/sec per source
+--rate-limit-burst <int>    bucket capacity per source
+```
+
+Both must be set (and > 0 / >= 1 respectively) to enable. Lab
+default is disabled; the gateway warns at startup when off.
+
+The limiter keys on `RemoteAddr` (the source as seen by the
+gateway). Behind an L7 LB, that's the LB's IP, so the limit
+aggregates all inbound traffic. That is the safe default —
+trusting `X-Forwarded-For` without a trusted-proxy CIDR list is
+how rate-limit bypasses happen. Operators who want per-real-client
+limiting should configure the upstream LB.
+
+Admin paths (`/v1/*`, `/metrics`) bypass the limiter unconditionally,
+matching the mTLS gate's exemption shape.
+
+Rejections increment `aether_gateway_ratelimit_rejected_total{class}`
+on `/metrics`, with `class` ∈ `{es2plus, es9plus}`. The
+`AetherGatewayRateLimited` alert in `deployments/observability/`
+fires on sustained high reject rate.
 
 ## Wire format
 

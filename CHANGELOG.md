@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Gateway rate limiter (`services/gateway/internal/ratelimit/`):
+- New `ratelimit` package: per-source-IP token bucket. Allow()
+  is lock-only-on-the-shared-map (no goroutines, no eviction
+  janitor — the BSS-facing surface has bounded source
+  cardinality and operators with broader threats fork the
+  upstream LB rules). Rate + burst configurable; nil limiter
+  is the explicit "disabled" form so middleware short-circuits
+  cleanly when off.
+- Path classifier rate-limits only `/gsma/rsp2/*` (es2plus and
+  es9plus); admin paths (`/v1/*`, `/metrics`, `/health`) bypass
+  unconditionally — same exemption shape as the ES2+ mTLS gate.
+- Source key is `RemoteAddr` (the source as seen by the
+  gateway). Defaults that ignore X-Forwarded-For are intentional;
+  trusting forwarded headers without a trusted-proxy CIDR list is
+  how rate-limit bypasses happen.
+- 8 unit tests cover burst exhaustion, token refill (with an
+  injected clock), source-independence, nil-limiter passthrough,
+  invalid-config rejection, RemoteAddr parsing for IPv4/IPv6/unix,
+  path classification, middleware end-to-end (429 + Retry-After +
+  reporter callback fires), and admin path bypass.
+- Server wired: new `Config.RateLimitRPS` + `Config.RateLimitBurst`,
+  middleware ordered BEFORE the mTLS gate so a flood of cert-less
+  requests can't burn CPU on chain checks. New `aether_gateway_
+  ratelimit_rejected_total{class}` counter exposed on `/metrics`,
+  pre-loaded with `class ∈ {es2plus, es9plus}` so the hot path is
+  lock-free.
+- New main flags `--rate-limit-rps` + `--rate-limit-burst`.
+  Disabled by default; gateway warns at startup when off.
+- `TestGateway_RateLimit_RejectsAfterBurst` drives the wired
+  middleware end-to-end through the routing layer: burst→reject,
+  Retry-After header set, admin paths stay 200, counter visible
+  on `/metrics`. Added to `tools/conformance/runner/catalogue.go`
+  (the harness now runs 41 cases).
+- New `AetherGatewayRateLimited` Prometheus alert (sev-3, fires
+  on > 1 req/s of 429s on /gsma/rsp2/* sustained for 5 min).
+  Counts as the 12th alert in the bundle.
+- README rows tightened: gateway moves from "OIDC and rate-limit
+  pending" to "OIDC pending"; Observability bundle row goes from
+  11 to 12 alerts; conformance harness from 40 to 41 cases.
+- Gateway README documents the SAS-SM-relevant default
+  ("source = RemoteAddr; trusting X-Forwarded-For without a
+  trusted-proxy list is how bypasses happen").
+
 Foundation:
 - Repository bootstrap: Apache 2.0 license, README with honest status
   table, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, GOVERNANCE,

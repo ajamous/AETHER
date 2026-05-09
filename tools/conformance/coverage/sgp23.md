@@ -34,6 +34,7 @@ internal).
 | ES2+ mTLS rejection of bad client  | Automated   | `services/gateway/.../server_mtls_test.go::TestGateway_MTLS_ES2PlusRejectsUntrustedClientCert` |
 | ES2+ mTLS rejection of no cert     | Automated   | `services/gateway/.../server_mtls_test.go::TestGateway_MTLS_ES2PlusRejectsNoClientCert` |
 | ES2+ admin paths bypass mTLS gate  | Automated   | `services/gateway/.../server_mtls_test.go::TestGateway_MTLS_AdminPathsDoNotRequireClientCert` |
+| Rate-limiter rejects /gsma/rsp2/* after burst | Automated | `services/gateway/.../server_test.go::TestGateway_RateLimit_RejectsAfterBurst` (admin paths bypass; rejected counter exposed on `/metrics`) |
 
 ## ES9+ — LPA to SM-DP+
 

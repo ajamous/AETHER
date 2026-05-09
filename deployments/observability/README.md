@@ -33,8 +33,9 @@ dashboards are independent and load alongside either.
 | AetherPostgresConnectionsExhausted | Implemented | `pg_stat_activity_count` (postgres-exporter) |
 | AetherHSMSignLatencyP99 (>250ms) | Implemented | `aether_hsm_sign_duration_seconds_bucket` (services/hsm-broker `/metrics`) |
 | AetherES2PlusUnauthorizedSpike  | Implemented (per-reason: no_tls / no_client_cert / chain_invalid) | `aether_gateway_es2plus_unauthorized_total` (services/gateway `/metrics`) |
+| AetherGatewayRateLimited        | Implemented (per-class: es2plus / es9plus) | `aether_gateway_ratelimit_rejected_total` (services/gateway `/metrics`) |
 
-All 11 alerts are wired to live metrics emitted by Aether services
+All 12 alerts are wired to live metrics emitted by Aether services
 or by standard exporters (kube-state-metrics, postgres-exporter).
 This satisfies the must-have alerts called out by
 `docs/sas-sm/reference-aws.md` and `docs/sas-sm/incident-response.md`.
