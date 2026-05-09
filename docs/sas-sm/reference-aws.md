@@ -208,10 +208,17 @@ instead; the hsm-broker is identical.
 - Multi-region active-active. Single region is correct for SAS-SM
   baseline; multi-region is a Phase 6 follow-up.
 - Cost optimisation past the basic shape.
-- Pre-built Terraform modules. The IaC modules under
-  `deployments/terraform/aws/` are planned and not yet present.
-  Until they land, this document is the spec your IaC has to
-  satisfy.
+- The CloudHSM activation ceremony. Terraform brings the
+  cluster up; the two-person key-ceremony procedure in
+  [key-ceremony.md](key-ceremony.md) takes it from there.
+- IRSA trust-policy attachment. The Terraform module creates
+  the IAM roles but uses placeholder trust policies; wiring
+  the EKS OIDC provider's actual ARN is a documented
+  post-deploy step. See the module's README.
+
+The Terraform modules implementing this topology live under
+`deployments/terraform/aws/`. See that directory's README for
+inputs, outputs, and the `examples/full` canonical wiring.
 
 ## Cross-references
 

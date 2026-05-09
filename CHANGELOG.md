@@ -508,6 +508,43 @@ Helm chart (`deployments/helm/aether/`):
 - New `helm` job in `.github/workflows/ci.yml` runs `helm lint`
   and renders both lab and production templates on every PR.
 
+Terraform (`deployments/terraform/aws/`):
+- AWS reference deployment as IaC: VPC + private/public subnets +
+  NAT + Flow Logs (365-day retention), EKS with all five
+  control-plane log types and customer-managed KMS envelope
+  encryption for Kubernetes Secrets, RDS Postgres Multi-AZ with
+  CMEK + 35-day backup + deletion protection + Performance
+  Insights + Secrets Manager-managed master password, CloudHSM
+  cluster with HSMs spread across AZs, S3 audit-log bucket with
+  Object Lock **Compliance** mode + KMS encryption + lifecycle
+  to Glacier after 90d, cross-region replica bucket skeleton
+  (replication rule wiring requires a caller-supplied
+  second-region provider).
+- IAM roles for EKS cluster, EKS nodes, audit, hsm-broker —
+  IRSA trust-policy attachment is documented as a manual
+  post-deploy step (the EKS OIDC issuer ARN isn't known until
+  the cluster is up; a future iteration will read it from the
+  data source and wire automatically).
+- Submodule layout under `modules/` (network, iam, eks, rds,
+  cloudhsm, storage); canonical wiring under `examples/full/`.
+- Production posture pinned by the module, not by variables:
+  Flow Logs on, all EKS control-plane logs on, RDS Multi-AZ +
+  CMEK + 35-day retention + deletion protection, S3 Object
+  Lock Compliance + KMS-CMEK + public access block + versioning.
+  These are SAS-SM policy, not preference, so the module
+  deliberately does not expose them as inputs.
+- New `terraform-validate` job in `.github/workflows/ci.yml`
+  runs `terraform fmt -check` + `terraform init -backend=false`
+  + `terraform validate` on both the root module and
+  `examples/full` on every PR.
+- README documents what the module does NOT do: it does not run
+  the CloudHSM activation ceremony (manual two-person procedure
+  per `key-ceremony.md`), it does not deploy Aether itself (Helm
+  chart is separate), it does not configure your IdP or ingress,
+  it does not handle multi-region active-active (Phase 6), and
+  it does not back up Terraform state (operator configures a
+  remote backend).
+
 Admin UI (`ui/admin/`):
 - Next.js 15 (App Router), React 18, Tailwind CSS, TypeScript strict.
 - Read-only operator console: dashboard, profile templates,
