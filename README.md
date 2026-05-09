@@ -39,7 +39,7 @@ The table below is the source of truth.
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
 | Conformance harness (SGP.23)  | Not started   |                                                    |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
-| Helm chart                    | Implemented   | Lab + production install paths render and lint; cert-init Job for lab pending |
+| Helm chart                    | Implemented   | Lab + production install paths; lab cert-init initContainer auto-mints SGP.26-style chain on every pod start |
 | Terraform modules             | Not started   |                                                    |
 | Observability bundle          | Implemented   | 11 Prometheus alert rules (cert expiry, audit chain integrity, service health, HSM ready + p99 latency, ES2+ 401 spike per reason, Postgres) + ServiceMonitor manifests under `deployments/observability/`. Grafana dashboards still pending |
 | SAS-SM evidence templates     | Partial       | Gap analysis, key ceremony, RBAC, audit retention, AWS reference, DR runbook, incident response, common audit findings, recertification checklist — all in `docs/sas-sm/` (free, no paid tier). GCP / on-prem reference deployments still pending |

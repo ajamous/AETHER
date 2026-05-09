@@ -82,6 +82,40 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Helm chart lab cert-init:
+- Lab-mode certmgr Deployment now ships with an initContainer
+  that runs `certmgr --generate-lab=/certs` on every pod start,
+  dropping a fresh SGP.26-style chain (CI root → EUM → DPtls/
+  DPauth/DPpb, ECDSA P-256, 24-hour validity) into an emptyDir
+  volume. The main container mounts the same emptyDir read-only
+  and starts as soon as the chain is in place.
+- `helm install aether ./aether` is now a true one-shot for the
+  lab — no operator pre-work, no manual ConfigMap to create, no
+  side-channel `docker run` to mint certs offline. The README
+  section that documented the manual step is replaced with the
+  new behaviour.
+- The pattern is deliberately emptyDir, not a PVC: lab certs are
+  ephemeral by design (ADR 0004). Each pod restart mints a new
+  chain; keys never persist to durable storage. Production mode
+  skips the initContainer entirely; CI-issued certs come from
+  the existing `identitySecret` + trust-store ConfigMap path.
+- New value `certmgr.lab.certInit.enabled` (default true). Set
+  false to opt out and bring your own pre-populated `/certs`.
+- The certmgr Deployment template moves from the shared
+  `aether.backendDeploy` helper to inline so it can attach the
+  emptyDir volume and the initContainer — the helper handles
+  uniform Deployments and shouldn't accumulate special cases.
+- Verified by `helm template`: lab default renders the
+  initContainer with `--generate-lab=/certs`; production mode
+  with `certmgr.mode=production --set certmgr.trustStore=...`
+  renders zero `cert-init` references. Both modes lint clean.
+- NOTES.txt's lab-mode warning replaced with a calmer NOTE:
+  initContainer auto-bootstraps; ephemeral by design.
+- Status table: Helm chart Implemented note no longer claims
+  cert-init Job is "pending"; chart README's "Lab cert chain"
+  section is rewritten to describe the new behaviour and the
+  opt-out value.
+
 Observability instrumentation closes the bundle's pending alerts:
 - New `services/hsm-broker/internal/metrics` package: small
   dependency-free Prometheus exposition (LatencyHistogram +

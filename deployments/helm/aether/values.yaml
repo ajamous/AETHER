@@ -86,8 +86,8 @@ certmgr:
   mode: lab
   # trustStore is the CI roots PEM (concatenated, multi-line). For
   # `production`, you must provide your own. For `lab`, leave empty —
-  # the lab compose generates a chain at startup; in Kubernetes a
-  # one-shot init job will mint a chain into the same volume.
+  # an initContainer mints a fresh SGP.26-style chain on every pod
+  # start (see lab.certInit below).
   trustStore: ""
   intermediates: ""
   # Existing secret holding identity keys (DPtls/DPauth/DPpb). Required
@@ -95,6 +95,16 @@ certmgr:
   # production private keys.
   identitySecret:
     name: ""
+  # Lab-mode auto-bootstrap. The initContainer runs
+  # `certmgr --generate-lab=/certs` on every pod start, dropping a
+  # fresh ECDSA P-256 chain (CI root → EUM → DPtls/DPauth/DPpb)
+  # into an emptyDir mounted at /certs. Production mode skips this
+  # path entirely; CI-issued certs come from identitySecret + the
+  # trustStore ConfigMap. Set false to opt out (e.g. when
+  # pre-populating /certs from your own source).
+  lab:
+    certInit:
+      enabled: true
   service:
     port: 8444
   resources:
