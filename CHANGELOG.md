@@ -9,6 +9,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+HSM vendor configuration documentation (`docs/sas-sm/hsm-vendors.md`):
+- Resolves a contradiction in the honest-status posture: the
+  README claimed "Cloud HSM backends — Not started" while the
+  SoftHSM package godoc said the same code path serves AWS
+  CloudHSM, GCP Cloud HSM, Azure Managed HSM, Thales Luna, and
+  Utimaco SecurityServer. Both can't be true; the right answer
+  is somewhere between.
+- New `docs/sas-sm/hsm-vendors.md` documents the per-vendor
+  plumbing each cluster needs: `.so` path, slot/token init,
+  PIN handling, known quirks. Sections for SoftHSM v2 (lab),
+  AWS CloudHSM, GCP Cloud HSM (via Cloud KMS PKCS#11), Azure
+  Managed HSM (via the pkcs11-azure shim — Azure ships no
+  first-party PKCS#11 module), Thales Luna Network HSM, and
+  Utimaco SecurityServer.
+- Each vendor section is concrete: lib paths, slot conventions,
+  client-install steps, the chart values that wire it in, and
+  the known quirks that surface against the Aether broker
+  (e.g. SoftHSM not supporting `CKD_SHA256_KDF`; Cloud KMS
+  PKCS#11 being read-mostly so key gen happens out of band;
+  Azure shim treating AAD tokens as "PIN"; Utimaco serialising
+  Sign per logical CPU).
+- A "What 'Implemented' honestly means" section spells out the
+  caveat: we exercise the PKCS#11 backend end-to-end against
+  SoftHSM v2 in CI, but do NOT claim "tested against AWS
+  CloudHSM in CI" — running against a real cluster is
+  expensive, and the SAS-SM auditor will run their own cluster
+  acceptance test as part of accreditation. The
+  hardware-in-the-loop bench stays the explicit follow-up.
+
+`hsm-broker` plumbing:
+- `--backend=pkcs11` is added as the preferred name; the
+  historical `--backend=softhsm` is kept as a backward-compat
+  alias. The error message lists both. Flag help and package
+  godoc updated to point at `docs/sas-sm/hsm-vendors.md`.
+- All existing tests pass; CI's SoftHSM integration job runs
+  unchanged (it still uses `softhsm` for compatibility).
+
+Status row updates:
+- Top-level "Cloud HSM backends": "Not started" → **"Implemented
+  (PKCS#11)"** with the honest caveat that per-vendor hardware
+  verification is a follow-up bench.
+- `services/hsm-broker` Status row: "AWS CloudHSM / GCP / Azure
+  / Thales / Utimaco backends — Not started" → "Implemented via
+  the PKCS#11 backend" with the same caveat.
+- "SAS-SM evidence templates" row: now lists "HSM vendor
+  configuration" alongside the other docs.
+- MkDocs nav: new "HSM vendor configuration" entry between
+  "Key ceremony" and "RBAC and SoD".
+- `common-findings.md` cross-references `hsm-vendors.md`.
+
 UI: forward Bearer tokens to the gateway (`ui/admin/`):
 - Auth.js v5 JWT callback now captures the IdP's `id_token` on
   sign-in and threads it through the session callback so it's

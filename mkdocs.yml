@@ -90,6 +90,7 @@ nav:
       - sas-sm/index.md
       - 'Gap analysis': sas-sm/gap-analysis.md
       - 'Key ceremony': sas-sm/key-ceremony.md
+      - 'HSM vendor configuration': sas-sm/hsm-vendors.md
       - 'RBAC and SoD': sas-sm/rbac.md
       - 'Audit log retention': sas-sm/audit-retention.md
       - 'Reference AWS deployment': sas-sm/reference-aws.md
