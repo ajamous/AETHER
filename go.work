@@ -4,4 +4,7 @@ go 1.22
 //
 // Service and shared-library modules are added here as they land.
 
-use ./pkg/asn1/sgp22/go
+use (
+	./pkg/asn1/sgp22/go
+	./pkg/crypto
+)
