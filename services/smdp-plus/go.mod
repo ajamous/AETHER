@@ -1,8 +1,11 @@
 module github.com/ajamous/aether/services/smdp-plus
 
-go 1.25.0
+go 1.22
 
-require github.com/jackc/pgx/v5 v5.9.2
+require (
+	github.com/ajamous/aether/pkg/hsmclient v0.0.0-00010101000000-000000000000
+	github.com/jackc/pgx/v5 v5.9.2
+)
 
 require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
@@ -11,3 +14,5 @@ require (
 	golang.org/x/sync v0.17.0 // indirect
 	golang.org/x/text v0.29.0 // indirect
 )
+
+replace github.com/ajamous/aether/pkg/hsmclient => ../../pkg/hsmclient

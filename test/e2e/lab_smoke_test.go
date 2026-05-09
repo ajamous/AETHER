@@ -13,8 +13,13 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/asn1"
 	"encoding/json"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 	"strings"
@@ -152,6 +157,56 @@ func TestLab_SMDSDiscoveryFlow(t *testing.T) {
 	// Cleanup.
 	http.Post(smds+"/gsma/rsp2/es12/deleteEvent", "application/json",
 		bytes.NewReader([]byte(`{"eid":"`+eid+`","event_id":"e2e-test"}`)))
+}
+
+func TestLab_SMDPInitiateAuthentication_SignatureVerifies(t *testing.T) {
+	smdp := os.Getenv("AETHER_SMDP")
+	if smdp == "" {
+		smdp = "http://localhost:8445"
+	}
+	smdp = strings.TrimRight(smdp, "/")
+
+	euiccChallenge := bytes.Repeat([]byte{0xCD}, 16)
+	body, _ := json.Marshal(map[string]any{
+		"euicc_challenge": euiccChallenge,
+		"smdp_address":    "aether.local",
+	})
+	resp, err := http.Post(smdp+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	var got struct {
+		TransactionID    string `json:"transaction_id"`
+		ServerSigned1    []byte `json:"server_signed1"`
+		ServerSignature1 []byte `json:"server_signature1"`
+		ServerCertificate []byte `json:"server_certificate"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got.ServerSigned1) == 0 {
+		t.Skip("smdp-plus running without --hsm-broker; skipping signature verification (not a failure)")
+	}
+	cert, err := x509.ParseCertificate(got.ServerCertificate)
+	if err != nil {
+		t.Fatalf("parse cert: %v", err)
+	}
+	pub, ok := cert.PublicKey.(*ecdsa.PublicKey)
+	if !ok {
+		t.Fatalf("cert public key is not ECDSA: %T", cert.PublicKey)
+	}
+	digest := sha256.Sum256(got.ServerSigned1)
+	var sig struct{ R, S *big.Int }
+	if _, err := asn1.Unmarshal(got.ServerSignature1, &sig); err != nil {
+		t.Fatalf("parse signature: %v", err)
+	}
+	if !ecdsa.Verify(pub, digest[:], sig.R, sig.S) {
+		t.Fatal("ServerSignature1 did not verify against returned cert public key")
+	}
 }
 
 func TestLab_DownloadOrderRoundTrip(t *testing.T) {

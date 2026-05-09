@@ -29,7 +29,7 @@ The table below is the source of truth.
 | `pkg/crypto`                  | Implemented   | ECDSA P-256, ECKA, X9.63-SHA-256 KDF, AES-128-GCM BSP. Brainpool P-256 r1 stubbed |
 | `services/hsm-broker`         | Implemented   | Memory + SoftHSM backends with real ECDSA Sign / ECKA Derive / GenerateKeyPair / ListKeys verified against SoftHSM v2; cloud HSM backends pending |
 | `services/certmgr`            | Implemented   | Cert chain load/verify, lab/prod modes, expiry metrics, lab-chain generator |
-| `services/smdp-plus`          | Skeleton      | ES9+ endpoint shapes + state machine, in-memory and Postgres-backed session stores; BPP returns 501 until SAIP codec lands |
+| `services/smdp-plus`          | Partial       | ES9+ endpoints + persistent sessions + signed `ServerSigned1` (SGP.22 §5.7.13) via hsm-broker; BPP returns 501 until SAIP codec lands |
 | `services/smds`               | Skeleton      | ES11 + ES12 with end-to-end discovery flow, in-memory and Postgres-backed event stores; signing pending |
 | `services/eim`                | Not started   | SGP.32                                             |
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |

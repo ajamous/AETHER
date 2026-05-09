@@ -7,6 +7,7 @@ go 1.25.0
 use (
 	./pkg/asn1/sgp22/go
 	./pkg/crypto
+	./pkg/hsmclient
 	./services/audit
 	./services/certmgr
 	./services/gateway
