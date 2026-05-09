@@ -223,6 +223,30 @@ ui:
     tag: ""
   service:
     port: 3000
+  # OIDC sign-in for the admin UI (Auth.js). When `oidc.issuer`,
+  # `oidc.credentialsSecret`, and `oidc.authSecretName` are all set,
+  # every page is gated behind a valid session and unauthenticated
+  # users are bounced to the IdP. When unset (lab default), the UI
+  # renders a yellow "AUTH DISABLED" banner and lets every request
+  # through — never expose this configuration on a network.
+  #
+  # credentialsSecret should hold:
+  #   - clientId      (string)
+  #   - clientSecret  (string)
+  # authSecretName should hold:
+  #   - secret  (random 32-byte string for cookie signing; use
+  #             `openssl rand -base64 32` to mint)
+  oidc:
+    issuer: ""
+    credentialsSecret: ""
+    authSecretName: ""
+    # Optional space-delimited override for OAuth scopes; defaults
+    # to "openid profile email" if unset.
+    scopes: ""
+    # Optional. The canonical URL of this UI as the IdP sees it
+    # (e.g. https://aether.your-mvno.com). Required for the OIDC
+    # callback when behind an ingress.
+    publicUrl: ""
   resources:
     requests:
       cpu: 100m

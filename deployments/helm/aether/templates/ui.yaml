@@ -1,4 +1,6 @@
 {{- $name := printf "%s-ui" (include "aether.fullname" .) -}}
+{{- $oidc := .Values.ui.oidc -}}
+{{- $oidcEnabled := and $oidc.issuer $oidc.credentialsSecret $oidc.authSecretName -}}
 {{- if .Values.ui.enabled -}}
 ---
 apiVersion: apps/v1
@@ -33,6 +35,33 @@ spec:
               value: "http://{{ include "aether.fullname" . }}-certmgr:{{ .Values.certmgr.service.port }}"
             - name: PORT
               value: "{{ .Values.ui.service.port }}"
+            {{- if $oidcEnabled }}
+            - name: AUTH_OIDC_ISSUER
+              value: {{ $oidc.issuer | quote }}
+            - name: AUTH_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidc.credentialsSecret }}
+                  key: clientId
+            - name: AUTH_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidc.credentialsSecret }}
+                  key: clientSecret
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $oidc.authSecretName }}
+                  key: secret
+            {{- if $oidc.scopes }}
+            - name: AUTH_OIDC_SCOPES
+              value: {{ $oidc.scopes | quote }}
+            {{- end }}
+            {{- if $oidc.publicUrl }}
+            - name: AUTH_URL
+              value: {{ $oidc.publicUrl | quote }}
+            {{- end }}
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.ui.service.port }}
