@@ -12,7 +12,8 @@ exposed by the gateway for upstream BSS.
 | HTTPS server, mTLS-ready                       | Implemented   |
 | ES9+ `initiateAuthentication` (§5.6.1)         | Partial — payload built and signed end to end; eUICC challenge length enforced |
 | ServerSigned1 ASN.1 + ECDSA-SHA-256 signing    | Implemented (§5.7.13 + §H.5) |
-| ES9+ `authenticateClient` (§5.6.2)             | Skeleton — eUICC signature verification pending |
+| ES9+ `authenticateClient` (§5.6.2)             | Partial — eUICC chain + signature + replay defense; outer SGP.22 SEQUENCE pending Annex B |
+| EuiccSigned1 verification (§5.7.13)            | Implemented |
 | ES9+ `getBoundProfilePackage` (§5.6.3)         | NotImplemented (501) — pending SAIP codec |
 | ES9+ `handleNotification` (§5.6.4)             | Skeleton      |
 | In-memory session store                        | Implemented   |

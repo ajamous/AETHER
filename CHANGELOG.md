@@ -82,6 +82,47 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+SM-DP+ eUICC verification on authenticateClient (SGP.22 §5.6.2 / §5.7.5):
+- New `pkg/certmgrclient`: Go client for certmgr. `TrustStore` and
+  `Intermediates` return parsed *x509.Certificate slices ready for
+  cert-pool construction.
+- `certmgr` gains `GET /v1/trust-store/pem` and `GET /v1/intermediates/pem`
+  returning the PEM bytes — needed by callers that have to actually
+  verify peer chains (the existing JSON `/v1/trust-store` was
+  metadata only).
+- `services/smdp-plus/internal/identity` gains `TrustMaterial` +
+  `FetchTrustMaterial` which pulls the trust set from certmgr and
+  builds *x509.CertPool for roots and intermediates. Empty trust
+  store is rejected as a config error.
+- `services/smdp-plus/internal/signing` gains `EuiccSigned1`
+  (mirroring §5.7.13: transactionId, serverAddress, serverChallenge,
+  euiccInfo2, ctxParams1) and `VerifyEuiccAuthenticate` which
+  verifies the eUICC chain (leaf → EUM → CI root), the ECDSA
+  signature against the leaf's public key, and that
+  `serverAddress` matches the configured SM-DP+ address.
+- `authenticateClient` handler now does the full check when
+  Config.Trust is set: chain, signature, serverAddress, plus
+  replay defense — `euiccSigned1.serverChallenge` must equal the
+  challenge the SM-DP+ issued in initiateAuthentication.
+  401 Unauthorized on any failure; 400 if required fields missing.
+- API type extended: `AuthenticateClientRequest` carries the four
+  pieces individually (euicc_signed1, euicc_signature1,
+  euicc_certificate, eum_certificate). The legacy single-blob
+  `authenticate_server_response` field is reserved for the
+  spec-faithful outer SEQUENCE once the Annex B modules are
+  vendored.
+- Unit tests cover happy path + four rejection cases (tampered
+  payload, tampered signature, unknown CI root, wrong server
+  address) using a synthetic CI→EUM→eUICC chain minted in process.
+- Integration test in `internal/server` drives the full flow:
+  initiateAuthentication → eUICC produces signed response →
+  authenticateClient verifies. Replay defense, unknown-CI, and
+  tampered-signature paths all gated.
+- `cmd/smdp-plus`: new `--certmgr` flag enables verification.
+  Lab compose already passes both `--hsm-broker` and `--certmgr`,
+  so `make lab-up` now exercises the full bidirectional auth
+  cryptography end to end.
+
 SM-DP+ signing pipeline:
 - New `pkg/hsmclient`: shared Go client for the HSM broker. Mirrors
   the broker's HTTP+JSON surface 1:1 so the eventual gRPC migration

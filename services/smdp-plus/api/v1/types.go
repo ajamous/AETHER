@@ -30,9 +30,30 @@ type InitiateAuthenticationResponse struct {
 }
 
 // AuthenticateClientRequest — SGP.22 §5.6.3.
+//
+// In a fully spec-faithful deployment, the LPA forwards a single
+// `AuthenticateServerResponse` SEQUENCE (SGP.22 §5.7.5) carrying the
+// eUICC's four signed pieces. Until the SGP.22 Annex B ASN.1 modules
+// are vendored and we can parse that SEQUENCE without ambiguity, the
+// HTTP+JSON shape carries the four pieces individually. The signing
+// pipeline (DER + ECDSA) over each piece is fully spec-correct;
+// only the outer envelope shape is the lab convenience.
 type AuthenticateClientRequest struct {
-	TransactionID      string `json:"transaction_id"`
-	AuthenticateServerResponse []byte `json:"authenticate_server_response"`
+	TransactionID string `json:"transaction_id"`
+
+	// EuiccSigned1DER is the DER-encoded EuiccSigned1 SEQUENCE (§5.7.13).
+	EuiccSigned1DER []byte `json:"euicc_signed1"`
+	// EuiccSignature1 is DER SEQUENCE { r, s } per §H.5.
+	EuiccSignature1 []byte `json:"euicc_signature1"`
+	// EuiccCertDER is the eUICC's leaf certificate (DER X.509).
+	EuiccCertDER []byte `json:"euicc_certificate"`
+	// EumCertDER is the EUM intermediate that issued the leaf.
+	EumCertDER []byte `json:"eum_certificate"`
+
+	// AuthenticateServerResponse is the legacy single-blob field.
+	// Reserved for the spec-faithful outer SEQUENCE; ignored when
+	// the four explicit fields above are populated.
+	AuthenticateServerResponse []byte `json:"authenticate_server_response,omitempty"`
 }
 
 // AuthenticateClientResponse — SGP.22 §5.6.3.

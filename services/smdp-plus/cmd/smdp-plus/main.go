@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ajamous/aether/pkg/certmgrclient"
 	"github.com/ajamous/aether/pkg/hsmclient"
 	"github.com/ajamous/aether/services/smdp-plus/internal/identity"
 	"github.com/ajamous/aether/services/smdp-plus/internal/server"
@@ -29,7 +30,7 @@ func run() error {
 		listen        = flag.String("listen", ":8443", "HTTP(S) listen address")
 		tlsCert       = flag.String("tls-cert", "", "TLS server cert (DPtls)")
 		tlsKey        = flag.String("tls-key", "", "TLS server key")
-		_             = flag.String("certmgr", "", "certmgr base URL (reserved)")
+		certmgrURL    = flag.String("certmgr", "", "certmgr base URL; enables eUICC verification on authenticateClient")
 		hsmBrokerURL  = flag.String("hsm-broker", "", "hsm-broker base URL; enables ServerSigned1 signing")
 		dpauthLabel   = flag.String("dpauth-label", "DPauth", "HSM key label for the DPauth identity")
 		serverAddress = flag.String("address", "aether.local", "SM-DP+ public address (goes into ServerSigned1.serverAddress)")
@@ -88,6 +89,25 @@ func run() error {
 		)
 	} else {
 		logger.Warn("smdp-plus signing DISABLED (no --hsm-broker); initiateAuthentication returns unsigned skeleton")
+	}
+
+	// Optional eUICC verification on authenticateClient. Enabled when
+	// --certmgr is set; otherwise the legacy state-machine-only path
+	// is preserved.
+	if *certmgrURL != "" {
+		cmCtx, cmCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		tm, err := identity.FetchTrustMaterial(cmCtx, certmgrclient.New(*certmgrURL))
+		cmCancel()
+		if err != nil {
+			return fmt.Errorf("fetch trust material from certmgr at %s: %w", *certmgrURL, err)
+		}
+		cfg.Trust = tm
+		logger.Info("smdp-plus eUICC verification enabled",
+			slog.Int("trust_roots", tm.RootCount()),
+			slog.Int("intermediates", tm.IntermediateCount()),
+		)
+	} else {
+		logger.Warn("smdp-plus eUICC verification DISABLED (no --certmgr); authenticateClient skips signature checks")
 	}
 
 	srv := server.New(store, cfg)
