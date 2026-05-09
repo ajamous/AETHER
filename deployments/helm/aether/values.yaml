@@ -1,0 +1,247 @@
+# Aether default values. Override what you need; leave the rest.
+#
+# Production deployments must override:
+#   - postgres.password (or postgres.existingSecret)
+#   - hsm.backend = "external" + hsm.pkcs11.libraryPath etc
+#   - certmgr.mode = "production" + certmgr.trustStore (PEM contents)
+#   - ingress.host
+#
+# See deployments/helm/aether/README.md for the production checklist.
+
+global:
+  # Image tag override applied to every Aether service unless the
+  # service-specific .image.tag wins.
+  imageTag: 0.1.0
+  imagePullPolicy: IfNotPresent
+  # Where built-with images live. Override for your registry.
+  imageRegistry: ghcr.io/ajamous
+
+# ----------------------------------------------------------------------
+# Datastores
+# ----------------------------------------------------------------------
+
+postgres:
+  # Set to false if you bring your own Postgres (recommended for prod).
+  # When false, set postgres.url to the connection string.
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  user: aether
+  database: aether
+  # Lab default. CHANGE IN PRODUCTION or use existingSecret.
+  password: aether
+  existingSecret: ""  # name of a Secret with a 'password' key
+  storage:
+    size: 10Gi
+    storageClassName: ""  # cluster default
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# Connection string used by services; computed if postgres.enabled.
+postgresUrl: ""
+
+# ----------------------------------------------------------------------
+# Aether services
+# ----------------------------------------------------------------------
+
+hsmBroker:
+  enabled: true
+  image:
+    repository: aether/hsm-broker
+    tag: ""  # falls back to global.imageTag
+  # Backend: memory | softhsm | external
+  # memory  — process memory. Lab and demo only.
+  # softhsm — PKCS#11 against the SoftHSM library mounted in the pod.
+  # external — point at a real HSM via PKCS#11 path + slot + PIN.
+  backend: memory
+  pkcs11:
+    libraryPath: /usr/lib/softhsm/libsofthsm2.so
+    slot: "0"
+    pinSecret:
+      # name of a Secret with a 'pin' key. Required for softhsm/external.
+      name: ""
+  service:
+    port: 8443
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  replicaCount: 1
+
+certmgr:
+  enabled: true
+  image:
+    repository: aether/certmgr
+    tag: ""
+  # mode: lab | production
+  mode: lab
+  # trustStore is the CI roots PEM (concatenated, multi-line). For
+  # `production`, you must provide your own. For `lab`, leave empty —
+  # the lab compose generates a chain at startup; in Kubernetes a
+  # one-shot init job will mint a chain into the same volume.
+  trustStore: ""
+  intermediates: ""
+  # Existing secret holding identity keys (DPtls/DPauth/DPpb). Required
+  # for `production` mode. The chart does NOT generate or store
+  # production private keys.
+  identitySecret:
+    name: ""
+  service:
+    port: 8444
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  replicaCount: 1
+
+smdpPlus:
+  enabled: true
+  image:
+    repository: aether/smdp-plus
+    tag: ""
+  service:
+    port: 8445
+  sessionTtl: 10m
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  replicaCount: 1
+
+smds:
+  enabled: true
+  image:
+    repository: aether/smds
+    tag: ""
+  service:
+    port: 8448
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  replicaCount: 1
+
+profileBuilder:
+  enabled: true
+  image:
+    repository: aether/profile-builder
+    tag: ""
+  service:
+    port: 8446
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  replicaCount: 1
+
+audit:
+  enabled: true
+  image:
+    repository: aether/audit
+    tag: ""
+  service:
+    port: 8447
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  replicaCount: 1
+
+gateway:
+  enabled: true
+  image:
+    repository: aether/gateway
+    tag: ""
+  service:
+    port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  replicaCount: 1
+
+ui:
+  enabled: true
+  image:
+    repository: aether/admin-ui
+    tag: ""
+  service:
+    port: 3000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  replicaCount: 1
+
+# ----------------------------------------------------------------------
+# Ingress (optional)
+# ----------------------------------------------------------------------
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: aether.example
+  tls:
+    enabled: false
+    secretName: ""
+
+# ----------------------------------------------------------------------
+# RBAC and security defaults applied to every Aether pod
+# ----------------------------------------------------------------------
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# ----------------------------------------------------------------------
+# Observability — chart emits Prometheus annotations; Grafana dashboards
+# are shipped separately under deployments/observability/ once that
+# directory lands.
+# ----------------------------------------------------------------------
+
+metrics:
+  prometheusAnnotations: true

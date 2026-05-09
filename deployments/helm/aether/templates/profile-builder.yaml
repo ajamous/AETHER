@@ -1,0 +1,2 @@
+{{- $env := list -}}
+{{ include "aether.backendDeploy" (list . .Values.profileBuilder "profile-builder" $env (list (printf "--listen=:%d" (int .Values.profileBuilder.service.port)) "--template-dir=/etc/aether/profile-builder/templates")) }}

@@ -1,0 +1,24 @@
+apiVersion: v2
+name: aether
+description: |
+  Open Source Remote SIM Provisioning. SM-DP+, SM-DS, eIM, profile-builder,
+  certmgr, hsm-broker, audit, gateway, and the admin UI in one chart.
+
+# Pre-1.0: the SGP.22 protocol surface is still being filled in. See the
+# repository README's Status table for what's runnable vs skeleton.
+type: application
+version: 0.1.0
+appVersion: "0.1.0-marconi"
+
+home: https://github.com/ajamous/aether
+sources:
+  - https://github.com/ajamous/aether
+keywords:
+  - rsp
+  - esim
+  - sgp22
+  - sgp32
+  - telecom
+maintainers:
+  - name: Ameed Jamous
+    email: a.jamous@telecomsxchange.com

@@ -1,0 +1,13 @@
+{{- $env := list -}}
+{{- $args := list (printf "--listen=:%d" (int .Values.hsmBroker.service.port)) -}}
+{{- if eq .Values.hsmBroker.backend "memory" -}}
+{{- $args = append $args "--backend=memory" -}}
+{{- else if eq .Values.hsmBroker.backend "softhsm" -}}
+{{- $args = append $args "--backend=softhsm" -}}
+{{- $args = append $args (printf "--pkcs11-lib=%s" .Values.hsmBroker.pkcs11.libraryPath) -}}
+{{- $args = append $args (printf "--slot=%s" .Values.hsmBroker.pkcs11.slot) -}}
+{{- if .Values.hsmBroker.pkcs11.pinSecret.name -}}
+{{- $env = append $env (dict "name" "HSM_PIN" "valueFrom" (dict "secretKeyRef" (dict "name" .Values.hsmBroker.pkcs11.pinSecret.name "key" "pin"))) -}}
+{{- end -}}
+{{- end -}}
+{{ include "aether.backendDeploy" (list . .Values.hsmBroker "hsm-broker" $env $args) }}

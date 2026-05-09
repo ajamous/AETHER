@@ -82,6 +82,28 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Helm chart (`deployments/helm/aether/`):
+- Single chart deploys all backend services + admin UI + an optional
+  bundled Postgres StatefulSet with PVC.
+- Both install paths render and lint clean: lab defaults
+  (`helm install aether ./aether`) and production override
+  (external Postgres, SoftHSM/external PKCS#11, production cert
+  trust store, ingress with TLS).
+- Sensible production-grade defaults: non-root pod security context,
+  read-only root filesystem, capabilities dropped, dedicated
+  ServiceAccount, resource requests/limits per service, Prometheus
+  scrape annotations, readiness and liveness probes against
+  `/v1/health`.
+- Ingress template routes `/gsma/...` and `/v1/...` to the gateway
+  and `/` to the admin UI.
+- README documents the production override values, the lab
+  cert-chain manual step (until the cert-init Job lands), and the
+  explicit list of things the chart deliberately does NOT do
+  (generate production keys, configure ingress controller, do
+  Postgres backups, configure operator RBAC).
+- New `helm` job in `.github/workflows/ci.yml` runs `helm lint`
+  and renders both lab and production templates on every PR.
+
 Admin UI (`ui/admin/`):
 - Next.js 15 (App Router), React 18, Tailwind CSS, TypeScript strict.
 - Read-only operator console: dashboard, profile templates,

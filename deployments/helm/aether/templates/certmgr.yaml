@@ -1,0 +1,34 @@
+{{- $name := printf "%s-certmgr" (include "aether.fullname" .) -}}
+{{- if .Values.certmgr.enabled -}}
+{{- if and .Values.certmgr.trustStore (eq .Values.certmgr.mode "production") -}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-pki
+  labels: {{- include "aether.componentLabels" (list . "certmgr") | nindent 4 }}
+data:
+  ci-roots.pem: |
+{{ .Values.certmgr.trustStore | indent 4 }}
+  {{- if .Values.certmgr.intermediates }}
+  intermediates.pem: |
+{{ .Values.certmgr.intermediates | indent 4 }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+{{- $env := list -}}
+{{- $args := list (printf "--listen=:%d" (int .Values.certmgr.service.port)) (printf "--mode=%s" .Values.certmgr.mode) -}}
+{{- if eq .Values.certmgr.mode "lab" -}}
+{{- /* In lab mode, the chart expects a future init job to write a chain into /certs.
+   Until that job lands, document this honestly: the deployment runs but
+   refuses to start without a chain on disk. Operators using lab in
+   Kubernetes should pre-populate the volume. */ -}}
+{{- $args = append $args "--trust-store=/certs/ci-roots.pem" -}}
+{{- $args = append $args "--intermediates=/certs/eum.pem" -}}
+{{- $args = append $args "--dp-tls-cert=/certs/DPtls.pem" -}}
+{{- $args = append $args "--dp-auth-cert=/certs/DPauth.pem" -}}
+{{- $args = append $args "--dp-pb-cert=/certs/DPpb.pem" -}}
+{{- else -}}
+{{- $args = append $args "--trust-store=/etc/aether/pki/ci-roots.pem" -}}
+{{- end -}}
+{{ include "aether.backendDeploy" (list . .Values.certmgr "certmgr" $env $args) }}

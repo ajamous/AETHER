@@ -1,0 +1,41 @@
+Aether {{ .Chart.AppVersion }} installed as {{ .Release.Name }} in {{ .Release.Namespace }}.
+
+Mode: {{ .Values.certmgr.mode }} | HSM backend: {{ .Values.hsmBroker.backend }}
+
+What runs:
+{{- if .Values.postgres.enabled }}
+  - postgres        ({{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }})
+{{- else }}
+  - postgres        EXTERNAL ({{ .Values.postgresUrl | default "<unset>" }})
+{{- end }}
+{{- range $svc := list "hsmBroker" "certmgr" "smdpPlus" "smds" "profileBuilder" "audit" "gateway" "ui" }}
+{{- $cfg := index $.Values $svc }}
+  - {{ $svc | kebabcase | printf "%-15s" }} replicas={{ $cfg.replicaCount }} port={{ $cfg.service.port }}{{ if not $cfg.enabled }} (disabled){{ end }}
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Gateway and admin UI reachable at: https://{{ .Values.ingress.host }}/
+{{- else }}
+
+Port-forward to reach the admin UI locally:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "aether.fullname" . }}-ui {{ .Values.ui.service.port }}:{{ .Values.ui.service.port }}
+  open http://localhost:{{ .Values.ui.service.port }}
+{{- end }}
+
+{{- if eq .Values.certmgr.mode "lab" }}
+
+WARNING: certmgr is in LAB mode. The lab cert chain is not on the
+shared volume yet — you must pre-populate /certs in the certmgr pod
+or switch to mode=production with .Values.certmgr.trustStore. A
+chart-bundled cert-init Job is the next planned addition.
+{{- end }}
+
+{{- if eq .Values.hsmBroker.backend "memory" }}
+
+WARNING: hsm-broker is using the in-memory backend. Suitable for
+demos only; keys do not survive a restart.
+{{- end }}
+
+For the full status of what's runnable vs skeleton, see:
+https://github.com/ajamous/aether#status

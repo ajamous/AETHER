@@ -1,0 +1,7 @@
+{{- $env := list -}}
+{{- if .Values.postgres.enabled -}}
+{{- $env = append $env (dict "name" "AETHER_PG_URL" "value" (include "aether.postgresUrl" .)) -}}
+{{- else if .Values.postgresUrl -}}
+{{- $env = append $env (dict "name" "AETHER_PG_URL" "value" .Values.postgresUrl) -}}
+{{- end -}}
+{{ include "aether.backendDeploy" (list . .Values.audit "audit" $env (list (printf "--listen=:%d" (int .Values.audit.service.port)))) }}
