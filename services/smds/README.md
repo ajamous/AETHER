@@ -20,7 +20,7 @@ activation code or scanning a QR.
 | ------------------------------------------------ | ------------- |
 | ES12 RegisterEvent (§5.5.1)                      | Implemented (in-memory) |
 | ES12 DeleteEvent (§5.5.2)                        | Implemented   |
-| ES11 AuthenticateClient (§5.5.4)                 | Skeleton (no signature verification yet) |
+| ES11 AuthenticateClient (§5.5.4)                 | Implemented (SM-DS-side ServerSigned1 + ECDSA-SHA-256 signature via hsm-broker; opt-in via `--hsm-broker` + `--server-address`). Lab default is unsigned so `make lab-up` stays HSM-free |
 | ES11 GetEvents (§5.5.3)                          | Implemented (returns matching events for an EID) |
 | Root SM-DS role                                  | Implemented (single-tier)  |
 | Alternative SM-DS / cascade                      | Not started   |
@@ -31,6 +31,14 @@ activation code or scanning a QR.
 Storage: the in-memory store is the default. Pass `--pg-url` (or set
 `AETHER_PG_URL`) to use Postgres. The `(eid, event_id)` primary key
 plus an `ON CONFLICT DO UPDATE` clause keeps registration idempotent.
+
+Signing: opt in by passing `--hsm-broker=http://hsm-broker:8443` and
+`--server-address=smds.your-mvno.com`. With those set, the SM-DS
+includes a SGP.22 §5.5.4 ServerSigned1 SEQUENCE plus an
+ECDSA-SHA-256 signature in the AuthenticateClient response so the
+LPA can verify the SM-DS's identity. Without them, the lab default
+returns the transactionId alone — same shape as before signing
+landed.
 
 ## How a discovery handshake looks
 

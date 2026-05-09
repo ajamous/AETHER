@@ -18,12 +18,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
 
 	smdsv1 "github.com/ajamous/aether/services/smds/api/v1"
 	"github.com/ajamous/aether/services/smds/internal/events"
+	"github.com/ajamous/aether/services/smds/internal/signing"
+
+	"github.com/ajamous/aether/pkg/hsmclient"
 )
 
 // session is the LPA-side bookkeeping between authenticateClient and
@@ -32,19 +36,69 @@ type session struct {
 	tid       string
 	eid       smdsv1.EID
 	createdAt time.Time
+
+	// signedPayload + signature are populated when the SM-DS is
+	// configured with HSM signing (Config.Signer non-nil). Stored on
+	// the session so subsequent handler logic and tests can inspect
+	// what was returned to the LPA.
+	signedPayload []byte
+	signature     []byte
+}
+
+// Signer holds everything the AuthenticateClient handler needs to
+// produce a SGP.22 §5.5.4 ServerSigned1 payload + ECDSA signature.
+//
+// All three fields must be set to enable signing. ServerAddress is
+// the public-facing SM-DS hostname the LPA will see in the signed
+// payload (and which it cross-checks against the SM-DS certificate's
+// SAN). KeyID is the broker-side identifier for the SM-DS auth key.
+//
+// Signing is OFF by default: lab deployments don't need it, and
+// requiring an HSM at startup would block `make lab-up`. Production
+// deployments wire this in via main flags.
+type Signer struct {
+	Broker        *hsmclient.Client
+	KeyID         string
+	ServerAddress string
 }
 
 // Server adapts events.Store over HTTP.
 type Server struct {
-	store events.Store
+	store  events.Store
+	signer *Signer
+	logger *slog.Logger
 
 	mu       sync.Mutex
 	sessions map[string]*session
 }
 
-func New(s events.Store) *Server {
-	return &Server{store: s, sessions: make(map[string]*session)}
+// Config bundles the optional knobs. Pass nil for lab defaults.
+type Config struct {
+	Signer *Signer
+	Logger *slog.Logger
 }
+
+func New(s events.Store, cfgs ...Config) *Server {
+	srv := &Server{
+		store:    s,
+		sessions: make(map[string]*session),
+		logger:   slog.Default(),
+	}
+	for _, c := range cfgs {
+		if c.Signer != nil {
+			srv.signer = c.Signer
+		}
+		if c.Logger != nil {
+			srv.logger = c.Logger
+		}
+	}
+	return srv
+}
+
+// SigningEnabled reports whether the SM-DS will return a signed
+// ServerSigned1 payload from AuthenticateClient. Used by tests and
+// the /v1/health response.
+func (s *Server) SigningEnabled() bool { return s.signer != nil }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
@@ -133,11 +187,18 @@ func (s *Server) handleDeleteEvent(w http.ResponseWriter, r *http.Request) {
 
 // handleAuthenticateClient implements SGP.22 §5.5.4.
 //
-// The skeleton allocates a transactionID, captures the LPA's EID for
-// later GetEvents calls, and returns empty serverSigned1/Signature
-// fields. Signing those requires hsm-broker SoftHSM Sign + the SGP.22
-// ASN.1 codec — same dependency chain as smdp-plus's
-// initiateAuthentication.
+// Allocates a transactionID, captures the LPA's EID for later
+// GetEvents calls, and (when configured with an HSM signer) returns
+// a DER-encoded serverSigned1 + ECDSA-SHA-256 signature so the LPA
+// can verify the SM-DS's response against its identity certificate.
+//
+// When the signer is nil (lab default), the handler returns the
+// transactionID alone — same shape as before HSM wiring landed.
+// This keeps `make lab-up` HSM-free.
+//
+// SGP.22 §5.5.4 requires the eUICC challenge to be exactly 16
+// octets; we enforce that here so misbehaving LPAs fail loudly
+// instead of producing a bogus signature.
 func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request) {
 	var req smdsv1.AuthenticateClientRequest
 	if !decodeJSON(w, r, &req) {
@@ -151,13 +212,42 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 		writeProblem(w, http.StatusBadRequest, "euicc_challenge required")
 		return
 	}
-	tid := newToken()
+	if s.signer != nil && len(req.EUICCChallenge) != 16 {
+		writeProblem(w, http.StatusBadRequest, fmt.Sprintf("euicc_challenge must be 16 bytes when signing is enabled, got %d", len(req.EUICCChallenge)))
+		return
+	}
+
+	tidBytes := newRandom(16)
+	tid := hex.EncodeToString(tidBytes)
+
+	resp := smdsv1.AuthenticateClientResponse{TransactionID: tid}
+	sess := &session{tid: tid, eid: req.EID, createdAt: time.Now()}
+
+	if s.signer != nil {
+		serverChallenge := newRandom(16)
+		payload := signing.ServerSigned1{
+			TransactionID:   tidBytes,
+			EUICCChallenge:  req.EUICCChallenge,
+			ServerAddress:   s.signer.ServerAddress,
+			ServerChallenge: serverChallenge,
+		}
+		signed, sig, err := signing.SignServerSigned1(r.Context(), s.signer.Broker, s.signer.KeyID, payload)
+		if err != nil {
+			s.logger.Error("smds signServerSigned1 failed", slog.String("err", err.Error()))
+			writeProblem(w, http.StatusInternalServerError, "sign failed")
+			return
+		}
+		resp.ServerSigned1 = signed
+		resp.ServerSignature1 = sig
+		sess.signedPayload = signed
+		sess.signature = sig
+	}
+
 	s.mu.Lock()
-	s.sessions[tid] = &session{tid: tid, eid: req.EID, createdAt: time.Now()}
+	s.sessions[tid] = sess
 	s.mu.Unlock()
-	writeJSON(w, http.StatusOK, smdsv1.AuthenticateClientResponse{
-		TransactionID: tid,
-	})
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleGetEvents implements SGP.22 §5.5.3.
@@ -204,11 +294,17 @@ func (s *Server) handleAdminListEvents(w http.ResponseWriter, _ *http.Request) {
 // --- helpers --------------------------------------------------------------
 
 func newToken() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
+	return hex.EncodeToString(newRandom(16))
+}
+
+// newRandom returns n bytes of cryptographic randomness. Panics on
+// rand failure — that's not a recoverable error in the request path.
+func newRandom(n int) []byte {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
 		panic(err)
 	}
-	return hex.EncodeToString(b[:])
+	return b
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

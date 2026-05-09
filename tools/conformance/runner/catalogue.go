@@ -465,6 +465,30 @@ var catalogue = []Case{
 		Module: "services/smds", Package: "./internal/events/...",
 		RunPattern: "^TestMemoryStore_Idempotent$",
 	},
+	{
+		Family: "ES11/ES12",
+		Title:  "ServerSigned1 ASN.1 round-trip",
+		Module: "services/smds", Package: "./internal/signing/...",
+		RunPattern: "^TestServerSigned1_RoundTrip$",
+	},
+	{
+		Family: "ES11/ES12",
+		Title:  "ServerSigned1 validation rejects bad inputs",
+		Module: "services/smds", Package: "./internal/signing/...",
+		RunPattern: "^TestServerSigned1_ValidationCatches$",
+	},
+	{
+		Family: "ES11/ES12",
+		Title:  "AuthenticateClient signature verifies end-to-end",
+		Module: "services/smds", Package: "./internal/server/...",
+		RunPattern: "^TestSMDS_AuthenticateClient_SigningEndToEnd$",
+	},
+	{
+		Family: "ES11/ES12",
+		Title:  "AuthenticateClient rejects bad eUICC challenge when signing",
+		Module: "services/smds", Package: "./internal/server/...",
+		RunPattern: "^TestSMDS_AuthenticateClient_RejectsBadChallengeWhenSigning$",
+	},
 
 	// -- SGP.32 — eIM --------------------------------------------
 	{

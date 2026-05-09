@@ -901,6 +901,50 @@ Status row updates:
   mTLS + rate-limit + OIDC, all opt-in.
 - Conformance harness: 41 → 50 cases across 9 families.
 
+SM-DS signing (`services/smds/internal/signing/`):
+- New `signing` package mirrors smdp-plus's `ServerSigned1` codec
+  for SGP.22 §5.5.4 (AuthenticateClient at SM-DS). Same DER
+  shape, same ECDSA-SHA-256 algorithm, same hsm-broker
+  integration — but a separate package because the SM-DS auth
+  key has a different role + lifecycle from the SM-DP+'s DPauth
+  key, and merging them would couple two services that should
+  stay independent.
+- 8 unit tests cover the ASN.1 round-trip, every validate()
+  rejection path (empty/oversized tid, bad-length challenges,
+  empty serverAddress), end-to-end signing through a fake HSM
+  broker that returns a real ECDSA-P256 signature, and hex
+  transactionID formatting.
+- `services/smds` server gains an opt-in `Signer` config. When
+  set, AuthenticateClient builds a real ServerSigned1 SEQUENCE
+  (with a fresh 16-byte serverChallenge), asks the broker to
+  sign over its SHA-256 digest, and returns both the
+  DER-encoded payload and the ECDSA signature in the response so
+  the LPA can verify against the SM-DS identity certificate.
+  Required when signing: euiccChallenge must be exactly 16 bytes
+  (the spec mandates this); the unsigned lab path is permissive
+  to keep `make lab-up` working.
+- Three new server-level tests: end-to-end signing happy path
+  (asserts the returned ServerSigned1 decodes, the
+  serverAddress + euiccChallenge propagate, the transactionId
+  matches the response, and the ECDSA signature verifies
+  against the broker's public key); rejects bad eUICC challenge
+  when signing is enabled (asserts HSM Sign is NEVER called);
+  lab mode without signing returns no signed payload.
+- `cmd/smds` gains three flags: `--hsm-broker`,
+  `--signing-key` (default `smds-auth-key`), and
+  `--server-address`. The server warns at startup when signing
+  is disabled — same explicit-default-off-with-warning pattern
+  as the gateway's mTLS and rate-limit flags.
+- Status row updates: `services/smds` moves from "Skeleton" to
+  "Partial" with the new caveat documented (LPA-side certificate
+  verification is the named follow-up). The README also tightens
+  the AuthenticateClient row from "Skeleton (no signature
+  verification yet)" to "Implemented (SM-DS-side ServerSigned1
+  + ECDSA-SHA-256 via hsm-broker; opt-in)".
+- Conformance harness gains 4 cases (ServerSigned1 round-trip,
+  validation, signing end-to-end, rejects-bad-challenge); 54
+  total now (was 50).
+
 Terraform (`deployments/terraform/azure/`):
 - Azure reference deployment as IaC, third in the cloud trifecta
   alongside AWS and GCP. Stands up the topology described in
