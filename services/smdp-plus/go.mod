@@ -1,6 +1,6 @@
 module github.com/ajamous/aether/services/smdp-plus
 
-go 1.22
+go 1.25.0
 
 require (
 	github.com/ajamous/aether/pkg/certmgrclient v0.0.0-00010101000000-000000000000
