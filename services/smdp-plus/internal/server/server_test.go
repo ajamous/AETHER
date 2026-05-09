@@ -38,7 +38,7 @@ func TestInitiateAuthentication_HappyPath(t *testing.T) {
 	var resp smdpv1.InitiateAuthenticationResponse
 	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
 		smdpv1.InitiateAuthenticationRequest{
-			EUICCChallenge: []byte("challenge-bytes"),
+			EUICCChallenge: bytes.Repeat([]byte{0xAA}, 16),
 			SMDPAddress:    "aether.local",
 		}, &resp)
 	if httpResp.StatusCode != http.StatusOK {
@@ -63,7 +63,7 @@ func TestAuthenticateClient_StateProgression(t *testing.T) {
 
 	var initResp smdpv1.InitiateAuthenticationResponse
 	postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
-		smdpv1.InitiateAuthenticationRequest{EUICCChallenge: []byte("c"), SMDPAddress: "x"},
+		smdpv1.InitiateAuthenticationRequest{EUICCChallenge: bytes.Repeat([]byte{0xCC}, 16), SMDPAddress: "x"},
 		&initResp)
 	tid := initResp.TransactionID
 	if tid == "" {
@@ -97,7 +97,7 @@ func TestGetBoundProfilePackage_ReturnsNotImplemented(t *testing.T) {
 	srv, _ := newTestServer(t)
 	var initResp smdpv1.InitiateAuthenticationResponse
 	postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
-		smdpv1.InitiateAuthenticationRequest{EUICCChallenge: []byte("c"), SMDPAddress: "x"},
+		smdpv1.InitiateAuthenticationRequest{EUICCChallenge: bytes.Repeat([]byte{0xCC}, 16), SMDPAddress: "x"},
 		&initResp)
 	postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
 		smdpv1.AuthenticateClientRequest{TransactionID: initResp.TransactionID}, nil)

@@ -7,30 +7,38 @@ exposed by the gateway for upstream BSS.
 
 ## Status
 
-| Piece                                      | Status        |
-| ------------------------------------------ | ------------- |
-| HTTPS server, mTLS-ready                   | Implemented   |
-| ES9+ `initiateAuthentication` (§5.6.2)     | Skeleton (correct shape, no eUICC verification yet) |
-| ES9+ `authenticateClient` (§5.6.3)         | Skeleton      |
-| ES9+ `getBoundProfilePackage` (§5.6.4)     | Skeleton      |
-| ES9+ `handleNotification` (§5.6.5)         | Skeleton      |
-| In-memory session store                    | Implemented   |
-| Postgres-backed session store              | Implemented (with TTL eviction) |
-| Redis session store                        | Not started   |
-| BPP generation (UPP → PPP → BPP)           | Not started — depends on SAIP codec + real ASN.1 modules |
-| State machine (Annex A)                    | Skeleton      |
-| Hookup to certmgr / hsm-broker             | Wired (HTTP clients present; protocol use lands with BPP) |
+| Piece                                          | Status        |
+| ---------------------------------------------- | ------------- |
+| HTTPS server, mTLS-ready                       | Implemented   |
+| ES9+ `initiateAuthentication` (§5.6.1)         | Partial — payload built and signed end to end; eUICC challenge length enforced |
+| ServerSigned1 ASN.1 + ECDSA-SHA-256 signing    | Implemented (§5.7.13 + §H.5) |
+| ES9+ `authenticateClient` (§5.6.2)             | Skeleton — eUICC signature verification pending |
+| ES9+ `getBoundProfilePackage` (§5.6.3)         | NotImplemented (501) — pending SAIP codec |
+| ES9+ `handleNotification` (§5.6.4)             | Skeleton      |
+| In-memory session store                        | Implemented   |
+| Postgres-backed session store                  | Implemented (with TTL eviction) |
+| Redis session store                            | Not started   |
+| BPP generation (UPP → PPP → BPP)               | Not started — depends on SAIP codec + real ASN.1 modules |
+| State machine (Annex A)                        | Partial       |
+| Hookup to certmgr / hsm-broker                 | Wired — DPauth identity provisioned via hsm-broker on startup |
 
-The skeleton endpoints accept and return JSON with the SGP.22
-field shapes. The actual cryptographic protocol — eUICC challenge
-verification, ECDSA over the SM-DP+ identity chain, BPP encryption
-with ECKA-derived session keys — lands in a focused PR alongside
-the spec-faithful ASN.1 types and SGP.26 conformance vectors.
+initiateAuthentication is now end-to-end signed. On startup smdp-plus
+asks the hsm-broker to generate (or reference) a DPauth keypair, then
+self-signs an X.509 wrapper around the public point. Each
+initiateAuthentication call builds `ServerSigned1` per §5.7.13,
+asks the broker to ECDSA-SHA-256 sign the digest per §H.5, and
+returns the DER payload + signature + cert. A test harness can verify
+the signature with stdlib ECDSA against the returned cert; this is
+done in both the server unit tests and `test/e2e`.
 
-This is deliberate. A pretend-ES9+ that returns the right HTTP shape
-but skips signature verification would be more dangerous than an
-honest skeleton that returns NotImplemented from the protocol
-methods. We refuse to ship that pretence.
+What remains honestly NOT done:
+- A real LPA verifying against GSMA CI roots will reject the
+  self-signed lab cert. That is the deliberate signal "you are in
+  lab mode."
+- `authenticateClient` does not yet verify the eUICC signature.
+- `getBoundProfilePackage` still returns 501. BPP generation needs
+  the SAIP codec + spec-faithful SGP.22 ASN.1 modules; it is the
+  next major Phase 1 work item.
 
 ## Running
 

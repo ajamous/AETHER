@@ -17,18 +17,47 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ajamous/aether/pkg/hsmclient"
 	smdpv1 "github.com/ajamous/aether/services/smdp-plus/api/v1"
+	"github.com/ajamous/aether/services/smdp-plus/internal/identity"
 	"github.com/ajamous/aether/services/smdp-plus/internal/session"
+	"github.com/ajamous/aether/services/smdp-plus/internal/signing"
 )
 
 // Server is the SM-DP+ HTTP server.
 type Server struct {
 	sessions session.Store
+	hsm      *hsmclient.Client
+	identity *identity.Identity
+	address  string // SM-DP+ public address (goes into ServerSigned1.serverAddress)
 }
 
-// New constructs a Server with the given session store.
-func New(s session.Store) *Server {
-	return &Server{sessions: s}
+// Config holds the optional dependencies. New() works with the
+// zero-value config: signing is then disabled and ServerSigned1 fields
+// in initiateAuthentication responses are left nil. Setting HSM and
+// Identity enables signing.
+type Config struct {
+	HSM      *hsmclient.Client
+	Identity *identity.Identity
+	Address  string
+}
+
+// New constructs a Server with the given session store and (optional)
+// signing dependencies.
+func New(s session.Store, cfgs ...Config) *Server {
+	srv := &Server{sessions: s}
+	if len(cfgs) > 0 {
+		srv.hsm = cfgs[0].HSM
+		srv.identity = cfgs[0].Identity
+		srv.address = cfgs[0].Address
+	}
+	return srv
+}
+
+// signingEnabled reports whether the server has all the pieces it
+// needs to populate ServerSigned1/ServerSignature1/ServerCertificate.
+func (s *Server) signingEnabled() bool {
+	return s.hsm != nil && s.identity != nil && s.address != ""
 }
 
 // Routes returns an http.Handler with all endpoints mounted.
@@ -75,10 +104,14 @@ func (s *Server) ListenAndServeTLS(ctx context.Context, addr, certFile, keyFile 
 
 // handleInitiateAuthentication implements SGP.22 §5.6.1.
 //
-// Today we accept the LPA's request, mint a serverChallenge, allocate a
-// transactionID, and store the session. We do NOT yet sign serverSigned1
-// or attach a real SM-DP+ certificate — those land alongside hsm-broker
-// SoftHSM Sign and the SAIP / SGP.22 ASN.1 codec.
+// Allocates a transactionID, mints a 16-byte serverChallenge, stores
+// the session, and (when signing is enabled) builds + signs
+// ServerSigned1 per §5.7.13 using the DPauth key in the HSM broker.
+// The ServerCertificate field carries the X.509 wrapper around the
+// public half so the LPA-side test harness can verify the signature.
+//
+// SGP.22 mandates the eUICC challenge to be 16 bytes; we accept any
+// non-empty value but the LPA's eUICC will reject anything else.
 func (s *Server) handleInitiateAuthentication(w http.ResponseWriter, r *http.Request) {
 	var req smdpv1.InitiateAuthenticationRequest
 	if !decodeJSON(w, r, &req) {
@@ -88,16 +121,21 @@ func (s *Server) handleInitiateAuthentication(w http.ResponseWriter, r *http.Req
 		writeProblem(w, http.StatusBadRequest, "euicc_challenge required")
 		return
 	}
+	if len(req.EUICCChallenge) != 16 {
+		writeProblem(w, http.StatusBadRequest, "euicc_challenge must be 16 bytes per SGP.22 §5.7.13")
+		return
+	}
 
 	serverChallenge := make([]byte, 16)
 	if _, err := rand.Read(serverChallenge); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("rand: %v", err))
 		return
 	}
-	tid := session.NewTransactionID()
+	tidHex := session.NewTransactionID()
+	tidBytes, _ := hexDecode(tidHex)
 	now := time.Now()
 	sess := &session.Session{
-		TransactionID:   tid,
+		TransactionID:   tidHex,
 		State:           session.StateInitiated,
 		CreatedAt:       now,
 		UpdatedAt:       now,
@@ -109,13 +147,66 @@ func (s *Server) handleInitiateAuthentication(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	writeJSON(w, http.StatusOK, smdpv1.InitiateAuthenticationResponse{
-		TransactionID:   tid,
-		ServerSigned1:   nil, // populated when signing pipeline lands
-		ServerSignature1: nil,
-		EuiccCiPKIDToBeUsed: nil,
-		ServerCertificate: nil,
-	})
+	resp := smdpv1.InitiateAuthenticationResponse{TransactionID: tidHex}
+
+	if s.signingEnabled() {
+		payload := signing.ServerSigned1{
+			TransactionID:   tidBytes,
+			EUICCChallenge:  req.EUICCChallenge,
+			ServerAddress:   s.address,
+			ServerChallenge: serverChallenge,
+		}
+		signedDER, sig, err := signing.SignServerSigned1(r.Context(), s.hsm, s.identity.KeyID, payload)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("sign: %v", err))
+			return
+		}
+		resp.ServerSigned1 = signedDER
+		resp.ServerSignature1 = sig
+		resp.ServerCertificate = s.identity.CertDER
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// hexDecode is the package-level decoder we use to turn the
+// session.NewTransactionID() hex string back into the bytes that go
+// into the ASN.1 OCTET STRING. Wrapped so the import is local to
+// this server package.
+func hexDecode(s string) ([]byte, error) {
+	out := make([]byte, len(s)/2)
+	for i := 0; i < len(out); i++ {
+		v, err := parseHexByte(s[2*i], s[2*i+1])
+		if err != nil {
+			return nil, err
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+func parseHexByte(hi, lo byte) (byte, error) {
+	h, err := nibble(hi)
+	if err != nil {
+		return 0, err
+	}
+	l, err := nibble(lo)
+	if err != nil {
+		return 0, err
+	}
+	return h<<4 | l, nil
+}
+
+func nibble(c byte) (byte, error) {
+	switch {
+	case '0' <= c && c <= '9':
+		return c - '0', nil
+	case 'a' <= c && c <= 'f':
+		return c - 'a' + 10, nil
+	case 'A' <= c && c <= 'F':
+		return c - 'A' + 10, nil
+	}
+	return 0, fmt.Errorf("server: invalid hex nibble %q", c)
 }
 
 // handleAuthenticateClient implements SGP.22 §5.6.3 (skeleton).

@@ -82,6 +82,31 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+SM-DP+ signing pipeline:
+- New `pkg/hsmclient`: shared Go client for the HSM broker. Mirrors
+  the broker's HTTP+JSON surface 1:1 so the eventual gRPC migration
+  doesn't change callers.
+- `services/smdp-plus/internal/identity`: provisions the SM-DP+'s
+  DPauth identity. Lab mode generates a fresh key in the broker on
+  startup and self-signs an X.509 wrapper around the public point;
+  production mode references the operator's pre-loaded HSM key by
+  label and the certmgr-served CI cert.
+- `services/smdp-plus/internal/signing`: implements `ServerSigned1`
+  per SGP.22 §5.7.13 (transactionId, euiccChallenge, serverAddress,
+  serverChallenge) and `SignServerSigned1` which builds the DER,
+  hashes with SHA-256, and asks the broker to sign per §H.5.
+- `initiateAuthentication` now populates `ServerSigned1`,
+  `ServerSignature1`, and `ServerCertificate` when signing is
+  enabled (set `--hsm-broker`); returns the previous nil-fields
+  shape when it isn't, so we don't fabricate signatures.
+- `euicc_challenge` length now enforced to 16 bytes per spec.
+- Verified end-to-end: a server-side test extracts the public key
+  from the returned cert, recomputes the digest, and verifies the
+  signature with stdlib ECDSA. A matching lab smoke test under
+  `test/e2e` does the same against a running stack.
+- Lab compose already passes `--hsm-broker`, so `make lab-up`
+  demos signing automatically.
+
 Helm chart (`deployments/helm/aether/`):
 - Single chart deploys all backend services + admin UI + an optional
   bundled Postgres StatefulSet with PVC.
