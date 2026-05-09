@@ -11,7 +11,7 @@ Plus an optional bundled Postgres for state.
 | Lab install (`helm install aether ./aether`)     | Implemented   |
 | Production install (external Postgres + HSM)     | Implemented   |
 | Ingress (gateway + UI)                           | Implemented   |
-| Lab cert-init Job (auto-generate SGP.26 chain)   | Not started — see "Lab cert chain" |
+| Lab cert-init initContainer (auto-generate SGP.26 chain) | Implemented — opt-out via `certmgr.lab.certInit.enabled=false` |
 | HA defaults (multi-replica)                      | Not started — replicas default to 1 |
 | HPA / autoscaling                                | Not started   |
 | NetworkPolicies                                  | Not started   |
@@ -29,23 +29,24 @@ kubectl port-forward svc/aether-aether-ui 3000:3000
 open http://localhost:3000
 ```
 
-## Lab cert chain (manual step today)
+## Lab cert chain
 
-Until the cert-init Job ships, the certmgr deployment in `lab` mode
-expects PEM files at `/certs/`. Generate one offline and load it into a
-ConfigMap or PVC mounted at that path:
+In lab mode (`certmgr.mode: lab`, the default), the certmgr pod
+runs an `initContainer` that calls `certmgr --generate-lab=/certs`
+on every pod start. The chain (CI root → EUM → DPtls/DPauth/DPpb,
+ECDSA P-256, 24-hour validity) lands in an `emptyDir` volume that
+the main certmgr container then reads at startup. No operator
+pre-work; `helm install aether ./aether` is a true one-shot for
+the lab.
 
-```bash
-docker run --rm -v $(pwd)/certs:/certs golang:1.22 \
-  bash -c "cd /tmp && git clone https://github.com/ajamous/aether && \
-           cd aether/services/certmgr && \
-           go run ./cmd/certmgr --generate-lab=/certs"
+Lab certs are deliberately ephemeral. Each pod restart mints a
+new chain; the keys never persist to durable storage. This
+matches what the lab cert mode is for (see ADR 0004): test
+material that should not survive.
 
-kubectl create configmap aether-lab-certs --from-file=./certs/
-```
-
-Then mount that ConfigMap at `/certs` on the certmgr pod via a values
-override. A first-class `cert-init` Job is the next chart improvement.
+Opt out by setting `certmgr.lab.certInit.enabled: false` if you
+want to pre-populate `/certs` from a different source (e.g. a
+pre-built ConfigMap mounted via a values override).
 
 ## Production checklist
 

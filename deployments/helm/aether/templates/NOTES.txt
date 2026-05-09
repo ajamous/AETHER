@@ -25,10 +25,11 @@ Port-forward to reach the admin UI locally:
 
 {{- if eq .Values.certmgr.mode "lab" }}
 
-WARNING: certmgr is in LAB mode. The lab cert chain is not on the
-shared volume yet — you must pre-populate /certs in the certmgr pod
-or switch to mode=production with .Values.certmgr.trustStore. A
-chart-bundled cert-init Job is the next planned addition.
+NOTE: certmgr is in LAB mode. An initContainer auto-generates a
+fresh SGP.26-style chain (ECDSA P-256, 24-hour validity) on every
+pod start; lab certs are ephemeral by design. Switch to
+certmgr.mode=production with .Values.certmgr.trustStore for any
+non-lab deployment.
 {{- end }}
 
 {{- if eq .Values.hsmBroker.backend "memory" }}

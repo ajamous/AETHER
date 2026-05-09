@@ -1,6 +1,11 @@
+{{- $cfg := .Values.certmgr -}}
 {{- $name := printf "%s-certmgr" (include "aether.fullname" .) -}}
-{{- if .Values.certmgr.enabled -}}
-{{- if and .Values.certmgr.trustStore (eq .Values.certmgr.mode "production") -}}
+{{- $isLab := eq $cfg.mode "lab" -}}
+{{- $isProd := eq $cfg.mode "production" -}}
+{{- if $cfg.enabled -}}
+
+{{- /* Production mode: render the trust-store + intermediates ConfigMap. */ -}}
+{{- if and $isProd $cfg.trustStore }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -9,20 +14,16 @@ metadata:
   labels: {{- include "aether.componentLabels" (list . "certmgr") | nindent 4 }}
 data:
   ci-roots.pem: |
-{{ .Values.certmgr.trustStore | indent 4 }}
-  {{- if .Values.certmgr.intermediates }}
+{{ $cfg.trustStore | indent 4 }}
+  {{- if $cfg.intermediates }}
   intermediates.pem: |
-{{ .Values.certmgr.intermediates | indent 4 }}
+{{ $cfg.intermediates | indent 4 }}
   {{- end }}
-{{- end -}}
-{{- end -}}
-{{- $env := list -}}
-{{- $args := list (printf "--listen=:%d" (int .Values.certmgr.service.port)) (printf "--mode=%s" .Values.certmgr.mode) -}}
-{{- if eq .Values.certmgr.mode "lab" -}}
-{{- /* In lab mode, the chart expects a future init job to write a chain into /certs.
-   Until that job lands, document this honestly: the deployment runs but
-   refuses to start without a chain on disk. Operators using lab in
-   Kubernetes should pre-populate the volume. */ -}}
+{{- end }}
+
+{{- /* Build args. */ -}}
+{{- $args := list (printf "--listen=:%d" (int $cfg.service.port)) (printf "--mode=%s" $cfg.mode) -}}
+{{- if $isLab -}}
 {{- $args = append $args "--trust-store=/certs/ci-roots.pem" -}}
 {{- $args = append $args "--intermediates=/certs/eum.pem" -}}
 {{- $args = append $args "--dp-tls-cert=/certs/DPtls.pem" -}}
@@ -31,4 +32,113 @@ data:
 {{- else -}}
 {{- $args = append $args "--trust-store=/etc/aether/pki/ci-roots.pem" -}}
 {{- end -}}
-{{ include "aether.backendDeploy" (list . .Values.certmgr "certmgr" $env $args) }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "aether.componentLabels" (list . "certmgr") | nindent 4 }}
+spec:
+  replicas: {{ $cfg.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aether
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: certmgr
+  template:
+    metadata:
+      labels: {{- include "aether.componentLabels" (list . "certmgr") | nindent 8 }}
+      annotations:
+        {{- if .Values.metrics.prometheusAnnotations }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ $cfg.service.port }}"
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "aether.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if and $isLab $cfg.lab.certInit.enabled }}
+      # Lab cert-init: regenerate a fresh SGP.26-style chain on
+      # every pod start, into an emptyDir mounted at /certs. Lab
+      # certs are ephemeral by design — keys here are test
+      # material and must not survive. Production mode skips the
+      # initContainer entirely; CI-issued certs come from
+      # certmgr.identitySecret + the pki ConfigMap.
+      initContainers:
+        - name: cert-init
+          image: {{ include "aether.image" (list . $cfg) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            - "--generate-lab=/certs"
+          volumeMounts:
+            - name: certs
+              mountPath: /certs
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      {{- end }}
+      containers:
+        - name: certmgr
+          image: {{ include "aether.image" (list . $cfg) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            {{- range $args }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $cfg.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            {{- if $isLab }}
+            - name: certs
+              mountPath: /certs
+              readOnly: true
+            {{- end }}
+            {{- if and $isProd $cfg.trustStore }}
+            - name: pki
+              mountPath: /etc/aether/pki
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if $isLab }}
+        - name: certs
+          emptyDir: {}
+        {{- end }}
+        {{- if and $isProd $cfg.trustStore }}
+        - name: pki
+          configMap:
+            name: {{ $name }}-pki
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "aether.componentLabels" (list . "certmgr") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $cfg.service.port }}
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: aether
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: certmgr
+{{- end -}}
