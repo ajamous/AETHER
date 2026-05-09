@@ -26,7 +26,28 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/events/{seq}", s.handleGet)
 	mux.HandleFunc("GET /v1/verify", s.handleVerify)
 	mux.HandleFunc("GET /v1/health", s.handleHealth)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	return mux
+}
+
+// handleMetrics emits a tiny Prometheus exposition. The
+// deployments/observability/ alert rules consume these. The
+// chain-OK gauge is the most important: a 0 means tamper
+// detection has fired, which is always Sev-1.
+func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	r := s.ledger.Verify()
+	ok := 0
+	if r.OK {
+		ok = 1
+	}
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	_, _ = fmt.Fprintf(w, `# HELP aether_audit_chain_ok 1 when the hash chain verifies cleanly end to end.
+# TYPE aether_audit_chain_ok gauge
+aether_audit_chain_ok %d
+# HELP aether_audit_chain_length Number of entries in the audit ledger.
+# TYPE aether_audit_chain_length gauge
+aether_audit_chain_length %d
+`, ok, r.Length)
 }
 
 func (s *Server) ListenAndServe(ctx context.Context, addr string) error {

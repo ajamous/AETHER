@@ -1,0 +1,134 @@
+{{- if .Values.observability.prometheusOperator.enabled -}}
+{{- $rel := .Values.observability.prometheusOperator.releaseLabel -}}
+{{- $name := include "aether.fullname" . -}}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}-services
+  labels:
+    {{- include "aether.labels" . | nindent 4 }}
+    app.kubernetes.io/component: observability
+    release: {{ $rel | quote }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aether
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+          targetLabel: aether_component
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ $name }}-rules
+  labels:
+    {{- include "aether.labels" . | nindent 4 }}
+    app.kubernetes.io/component: observability
+    release: {{ $rel | quote }}
+spec:
+  groups:
+    - name: aether-audit-chain
+      interval: 60s
+      rules:
+        - alert: AetherAuditChainBroken
+          expr: aether_audit_chain_ok == 0
+          for: 0m
+          labels:
+            severity: sev-1
+            aether_component: audit
+          annotations:
+            summary: Audit hash chain integrity check failed
+            description: services/audit reports aether_audit_chain_ok=0. Always Sev-1.
+            runbook_url: https://github.com/ajamous/aether/blob/main/docs/sas-sm/incident-response.md#audit-chain-break-sub-procedure-always-sev-1
+        - alert: AetherAuditMetricsScrapeFailing
+          expr: up{job="aether",aether_component="audit"} == 0
+          for: 5m
+          labels:
+            severity: sev-2
+            aether_component: audit
+          annotations:
+            summary: Audit /metrics scrape is failing
+    - name: aether-certs
+      interval: 300s
+      rules:
+        - alert: AetherCertExpiringSoon
+          expr: aether_cert_expiry_days < 30
+          for: 30m
+          labels:
+            severity: sev-3
+            aether_component: certmgr
+          annotations:
+            summary: Aether identity cert {{`{{ $labels.name }}`}} expiring in {{`{{ $value }}`}} days
+        - alert: AetherCertExpiringUrgent
+          expr: aether_cert_expiry_days < 7
+          for: 10m
+          labels:
+            severity: sev-2
+            aether_component: certmgr
+          annotations:
+            summary: Aether identity cert {{`{{ $labels.name }}`}} expires in {{`{{ $value }}`}} days
+        - alert: AetherCertExpired
+          expr: aether_cert_expiry_days <= 0
+          for: 0m
+          labels:
+            severity: sev-1
+            aether_component: certmgr
+          annotations:
+            summary: Aether identity cert {{`{{ $labels.name }}`}} HAS EXPIRED
+    - name: aether-service-health
+      interval: 30s
+      rules:
+        - alert: AetherServiceDown
+          expr: kube_deployment_status_replicas_unavailable{deployment=~"aether-.+", namespace="{{ .Release.Namespace }}"} > 0
+          for: 2m
+          labels:
+            severity: sev-2
+          annotations:
+            summary: Aether deployment {{`{{ $labels.deployment }}`}} has unavailable replicas
+        - alert: AetherServiceCrashLooping
+          expr: rate(kube_pod_container_status_restarts_total{namespace="{{ .Release.Namespace }}"}[10m]) > 0
+          for: 10m
+          labels:
+            severity: sev-2
+          annotations:
+            summary: Pod {{`{{ $labels.pod }}`}} crash-looping
+    - name: aether-hsm
+      interval: 30s
+      rules:
+        - alert: AetherHSMBrokerUnhealthy
+          expr: aether_hsm_broker_ready == 0
+          for: 1m
+          labels:
+            severity: sev-1
+            aether_component: hsm-broker
+          annotations:
+            summary: HSM broker reports unhealthy
+            description: backend={{`{{ $labels.backend }}`}}. Signing flows downstream are failing.
+    - name: aether-postgres
+      interval: 60s
+      rules:
+        - alert: AetherPostgresConnectionsExhausted
+          expr: |
+            sum(pg_stat_activity_count{datname="aether"}) /
+            on() group_left() pg_settings_max_connections > 0.8
+          for: 5m
+          labels:
+            severity: sev-2
+            aether_component: postgres
+          annotations:
+            summary: Aether Postgres > 80% connection utilisation
+{{- end -}}

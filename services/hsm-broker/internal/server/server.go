@@ -37,7 +37,32 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /v1/generate-key-pair", s.handleGenerateKeyPair)
 	mux.HandleFunc("POST /v1/list-keys", s.handleListKeys)
 	mux.HandleFunc("GET /v1/health", s.handleHealth)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	return mux
+}
+
+// handleMetrics emits a small text/plain Prometheus exposition.
+// We deliberately don't pull in the prometheus/client_golang
+// dependency yet — every Aether service emits a tiny hand-rolled
+// catalogue today. The deployments/observability/ rules consume
+// these directly; a fuller instrumentation pass (histograms for
+// Sign latency, 401 counters on the gateway) is a focused
+// follow-up.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	hr, err := s.b.Health(r.Context())
+	ready := 0
+	backend := "unknown"
+	if err == nil && hr != nil {
+		if hr.Ready {
+			ready = 1
+		}
+		backend = hr.Backend
+	}
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	_, _ = fmt.Fprintf(w, `# HELP aether_hsm_broker_ready 1 when the broker reports a live PKCS#11 session.
+# TYPE aether_hsm_broker_ready gauge
+aether_hsm_broker_ready{backend=%q} %d
+`, backend, ready)
 }
 
 // ListenAndServe runs the HTTP server until ctx is cancelled.

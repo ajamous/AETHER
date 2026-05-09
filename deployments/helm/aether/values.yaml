@@ -291,10 +291,21 @@ serviceAccount:
   annotations: {}
 
 # ----------------------------------------------------------------------
-# Observability — chart emits Prometheus annotations; Grafana dashboards
-# are shipped separately under deployments/observability/ once that
-# directory lands.
+# Observability — chart emits Prometheus annotations; alert rules and
+# ServiceMonitor manifests live under deployments/observability/.
 # ----------------------------------------------------------------------
 
 metrics:
   prometheusAnnotations: true
+
+# Optional: render the Prometheus Operator CRDs (PrometheusRule +
+# ServiceMonitor) inside the release. Off by default — the chart
+# does not assume the Operator is installed. Adopters with
+# kube-prometheus-stack flip this on; everyone else applies the
+# raw rules YAML manually from deployments/observability/.
+observability:
+  prometheusOperator:
+    enabled: false
+    # Selector label the Operator looks for. Default matches the
+    # kube-prometheus-stack release name; override for other installs.
+    releaseLabel: kube-prometheus-stack

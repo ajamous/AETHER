@@ -57,7 +57,7 @@ versions.
 | Key ceremony with chain of custody | [key-ceremony.md](key-ceremony.md) — concrete procedure + form | Run the ceremony with the prescribed quorum | Signed chain-of-custody form (copy in audit pack) |
 | Key rotation procedure | certmgr rotation API (skeleton) + key-ceremony procedure for new keys | Schedule + execute rotations per policy | Rotation log, ceremony forms for rotation events |
 | Trust store integrity (CI roots) | `services/certmgr` loads from configured PEM; `/v1/trust-store/pem` lets services fetch | Pin CI roots in a versioned ConfigMap; review on each cert update | Versioned trust-store ConfigMap, change-control record |
-| Key expiry monitoring and alerting | `aether_cert_expiry_days` Prometheus metric per cert | Alertmanager rules; on-call rota | Alert rule YAML, on-call runbook |
+| Key expiry monitoring and alerting | `aether_cert_expiry_days` Prometheus metric per cert plus pre-built alert rules in `deployments/observability/` (3 cert-expiry alerts, sev-1/2/3 by days remaining) | Alertmanager routing; on-call rota | Alert rules YAML applied, on-call routing config, last firing record |
 
 ## D. Network and Infrastructure Security
 
@@ -117,9 +117,12 @@ platform plans to close:
    of the project plan. The DR runbook covers cold-start to a
    secondary region today; active-active tightens RPO from
    24 hours to minutes for the audit chain.
-2. **Bundled Grafana dashboards / Alertmanager rules** for the
-   operational observability requirements — coming with the
-   observability work, see Phase 0/1 follow-ups.
+2. **Grafana dashboards** for the operational observability
+   requirements. Alert rules + ServiceMonitor manifests now ship
+   under [deployments/observability/](https://github.com/ajamous/aether/tree/main/deployments/observability)
+   and lint clean with promtool. Dashboard JSON requires a Grafana
+   instance to validate, so it's a focused follow-up — alerts
+   first, dashboards second.
 3. **GCP and on-prem reference deployments** — only AWS today
    (see [reference-aws.md](reference-aws.md)).
 4. **Worked evidence package examples** — pending adopters passing
