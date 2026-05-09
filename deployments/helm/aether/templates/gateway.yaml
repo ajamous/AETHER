@@ -1,8 +1,110 @@
-{{- $env := list -}}
+{{- $cfg := .Values.gateway -}}
+{{- $name := printf "%s-gateway" (include "aether.fullname" .) -}}
+{{- if $cfg.enabled -}}
 {{- $args := list -}}
-{{- $args = append $args (printf "--listen=:%d" (int .Values.gateway.service.port)) -}}
+{{- $args = append $args (printf "--listen=:%d" (int $cfg.service.port)) -}}
 {{- $args = append $args (printf "--profile-builder=http://%s-profile-builder:%d" (include "aether.fullname" .) (int .Values.profileBuilder.service.port)) -}}
 {{- $args = append $args (printf "--smdp-plus=http://%s-smdp-plus:%d" (include "aether.fullname" .) (int .Values.smdpPlus.service.port)) -}}
 {{- $args = append $args (printf "--certmgr=http://%s-certmgr:%d" (include "aether.fullname" .) (int .Values.certmgr.service.port)) -}}
 {{- $args = append $args (printf "--smds=http://%s-smds:%d" (include "aether.fullname" .) (int .Values.smds.service.port)) -}}
-{{ include "aether.backendDeploy" (list . .Values.gateway "gateway" $env $args) }}
+{{- $args = append $args (printf "--eim=http://%s-eim:%d" (include "aether.fullname" .) (int .Values.eim.service.port)) -}}
+{{- if $cfg.tls.serverSecret -}}
+{{- $args = append $args "--tls-cert=/etc/aether/tls/tls.crt" -}}
+{{- $args = append $args "--tls-key=/etc/aether/tls/tls.key" -}}
+{{- end -}}
+{{- if $cfg.tls.es2plusClientCASecret -}}
+{{- $args = append $args "--es2plus-client-ca=/etc/aether/es2plus-ca/ca.crt" -}}
+{{- end -}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "aether.componentLabels" (list . "gateway") | nindent 4 }}
+spec:
+  replicas: {{ $cfg.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aether
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels: {{- include "aether.componentLabels" (list . "gateway") | nindent 8 }}
+      annotations:
+        {{- if .Values.metrics.prometheusAnnotations }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ $cfg.service.port }}"
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "aether.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: gateway
+          image: {{ include "aether.image" (list . $cfg) | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args:
+            {{- range $args }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ $cfg.service.port }}
+          readinessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: {{ if $cfg.tls.serverSecret }}HTTPS{{ else }}HTTP{{ end }}
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /v1/health
+              port: http
+              scheme: {{ if $cfg.tls.serverSecret }}HTTPS{{ else }}HTTP{{ end }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml $cfg.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          volumeMounts:
+            {{- if $cfg.tls.serverSecret }}
+            - name: tls
+              mountPath: /etc/aether/tls
+              readOnly: true
+            {{- end }}
+            {{- if $cfg.tls.es2plusClientCASecret }}
+            - name: es2plus-ca
+              mountPath: /etc/aether/es2plus-ca
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if $cfg.tls.serverSecret }}
+        - name: tls
+          secret:
+            secretName: {{ $cfg.tls.serverSecret }}
+        {{- end }}
+        {{- if $cfg.tls.es2plusClientCASecret }}
+        - name: es2plus-ca
+          secret:
+            secretName: {{ $cfg.tls.es2plusClientCASecret }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "aether.componentLabels" (list . "gateway") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $cfg.service.port }}
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: aether
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: gateway
+{{- end -}}

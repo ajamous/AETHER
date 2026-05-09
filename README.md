@@ -34,7 +34,7 @@ The table below is the source of truth.
 | `services/eim`                | Skeleton      | SGP.32 device registry + per-device command queue, in-memory and Postgres-backed; IPA poll/ack lifecycle tested end to end |
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
 | `services/audit`              | Implemented   | Hash-chained ledger with verify, in-memory and Postgres-backed stores; serializable concurrent appends verified |
-| `services/gateway`            | Skeleton      | ES2+ shapes + REST proxy to upstream services; OIDC/mTLS/rate-limit pending |
+| `services/gateway`            | Partial       | ES2+ shapes + REST proxy + HTTPS + verified-client-cert mTLS on /gsma/rsp2/es2plus/* (path-scoped); OIDC and rate-limit pending |
 | `ui/admin`                    | Skeleton      | Next.js 15 read-only console: dashboard, templates, certs, audit |
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
 | Conformance harness (SGP.23)  | Not started   |                                                    |

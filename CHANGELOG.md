@@ -82,6 +82,39 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Gateway TLS + mTLS for ES2+ (SGP.22 §5.4):
+- New `services/gateway/internal/tlsconf` package centralises the
+  listener configuration. Three modes: plain HTTP (lab default),
+  HTTPS, HTTPS + mTLS for ES2+.
+- Per-request middleware enforces "verified client cert required"
+  on `/gsma/rsp2/es2plus/*` and lets `/v1/*` admin paths through
+  unchanged. The two surfaces share the listener but live in
+  different auth realms — BSS-side mTLS, operator-side OIDC
+  (planned). `tls.VerifyClientCertIfGiven` at the handshake plus
+  the middleware at the request level form a belt-and-suspenders
+  defence against future config drift.
+- Verified by 7 integration tests using a freshly minted in-process
+  PKI: TLS-only without mTLS lets all clients in; mTLS lets `/v1/*`
+  through cert-less; mTLS rejects ES2+ with no client cert (401);
+  mTLS accepts ES2+ with a trusted client cert (200); mTLS rejects
+  ES2+ with a client cert from an unrelated CA. Plus negative
+  cases for missing key file and empty CA bundle.
+- `cmd/gateway` exposes `--tls-cert`, `--tls-key`,
+  `--es2plus-client-ca`. The startup banner prints the active mode
+  and warns when ES2+ mTLS is disabled.
+- Helm chart: gains `gateway.tls.serverSecret` and
+  `gateway.tls.es2plusClientCASecret` values (both empty by
+  default). When set, the chart mounts the Secrets at
+  `/etc/aether/tls/` and `/etc/aether/es2plus-ca/` and passes the
+  matching flags. Health probes adapt to HTTP vs HTTPS scheme.
+- Helm chart also gains the missing `eim:` block (the eIM service
+  shipped earlier had no chart values, blocking template
+  rendering for any release that included it).
+- Status table: gateway moves from Skeleton to Partial. SAS-SM
+  gap analysis rows for `ES2+ DownloadOrder authenticated` and
+  `mTLS for ES2+ inbound` updated to reflect the actual
+  enforcement (was: "configured"; now: tested-enforcement).
+
 SAS-SM evidence templates (`docs/sas-sm/`):
 - The first walkable preparation pack for an MVNO running through
   SAS-SM accreditation. All free, in-repo, no paid tier — see

@@ -8,6 +8,8 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +18,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
 
 type Server struct {
@@ -25,6 +29,11 @@ type Server struct {
 	smds           string
 	eim            string
 	httpClient     *http.Client
+
+	// TLS state. tlsConfig is the listener's TLS settings (nil = plain HTTP).
+	// es2plusClientCAs is non-nil when ES2+ mTLS is enforced.
+	tlsConfig        *tls.Config
+	es2plusClientCAs *x509.CertPool
 }
 
 type Config struct {
@@ -33,17 +42,35 @@ type Config struct {
 	CertMgr        string
 	SMDS           string
 	EIM            string
+
+	// TLS holds the listener configuration. Empty TLS means plain HTTP.
+	TLS tlsconf.Config
 }
 
-func New(cfg Config) *Server {
-	return &Server{
-		profileBuilder: strings.TrimRight(cfg.ProfileBuilder, "/"),
-		smdpPlus:       strings.TrimRight(cfg.SMDPPlus, "/"),
-		certmgr:        strings.TrimRight(cfg.CertMgr, "/"),
-		smds:           strings.TrimRight(cfg.SMDS, "/"),
-		eim:            strings.TrimRight(cfg.EIM, "/"),
-		httpClient:     &http.Client{Timeout: 10 * time.Second},
+// New constructs a Server. Returns an error if the TLS configuration
+// cannot be loaded.
+func New(cfg Config) (*Server, error) {
+	tlsCfg, err := tlsconf.BuildTLSConfig(cfg.TLS)
+	if err != nil {
+		return nil, err
 	}
+	var clientCAs *x509.CertPool
+	if cfg.TLS.Mode() == tlsconf.ModeTLSWithMTLS {
+		clientCAs, err = tlsconf.LoadES2PlusCAPool(cfg.TLS.ES2PlusClientCAFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &Server{
+		profileBuilder:   strings.TrimRight(cfg.ProfileBuilder, "/"),
+		smdpPlus:         strings.TrimRight(cfg.SMDPPlus, "/"),
+		certmgr:          strings.TrimRight(cfg.CertMgr, "/"),
+		smds:             strings.TrimRight(cfg.SMDS, "/"),
+		eim:              strings.TrimRight(cfg.EIM, "/"),
+		httpClient:       &http.Client{Timeout: 10 * time.Second},
+		tlsConfig:        tlsCfg,
+		es2plusClientCAs: clientCAs,
+	}, nil
 }
 
 func (s *Server) Routes() http.Handler {
@@ -65,13 +92,33 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/smds/events", s.proxy("smds", "/v1/events"))
 	mux.HandleFunc("GET /v1/eim/devices", s.proxy("eim", "/v1/devices"))
 
-	return mux
+	// Wrap in the ES2+ mTLS gate. When es2plusClientCAs is nil
+	// (mTLS disabled, lab default) this is a no-op pass-through;
+	// when populated it requires a verified client cert on
+	// /gsma/rsp2/es2plus/* and lets everything else through
+	// unchanged.
+	return tlsconf.ES2PlusMTLSMiddleware(s.es2plusClientCAs)(mux)
 }
 
+// ListenAndServe runs the gateway. If the configured mode includes
+// TLS, it serves over HTTPS; otherwise plain HTTP (lab default).
 func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
-	srv := &http.Server{Addr: addr, Handler: s.Routes(), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           s.Routes(),
+		ReadHeaderTimeout: 10 * time.Second,
+		TLSConfig:         s.tlsConfig,
+	}
 	errCh := make(chan error, 1)
-	go func() { errCh <- srv.ListenAndServe() }()
+	go func() {
+		if s.tlsConfig != nil {
+			// Cert/key already loaded into srv.TLSConfig.Certificates;
+			// passing empty strings tells ListenAndServeTLS to use those.
+			errCh <- srv.ListenAndServeTLS("", "")
+			return
+		}
+		errCh <- srv.ListenAndServe()
+	}()
 	select {
 	case <-ctx.Done():
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -84,6 +131,13 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 		return err
 	}
 }
+
+// TLSConfig exposes the loaded *tls.Config for tests that need to
+// drive the listener via httptest.NewUnstartedServer.
+func (s *Server) TLSConfig() *tls.Config { return s.tlsConfig }
+
+// ES2PlusClientCAs exposes the client CA pool for tests.
+func (s *Server) ES2PlusClientCAs() *x509.CertPool { return s.es2plusClientCAs }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{

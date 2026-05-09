@@ -16,10 +16,39 @@ Aether's API gateway. Single entry point for:
 | ES2+ ReleaseProfile (§5.6.4)                     | Skeleton     |
 | ES2+ HandleNotification                          | Skeleton     |
 | REST: list/inspect templates                     | Implemented (proxy) |
+| HTTPS listener                                   | Implemented (`--tls-cert` / `--tls-key`) |
+| mTLS for ES2+ (path-scoped)                      | Implemented (`--es2plus-client-ca`); `/v1/*` admin paths stay unchallenged |
 | OIDC auth                                        | Not started  |
-| mTLS for ES2+                                    | Not started  |
 | Rate limiting / RBAC                             | Not started  |
 | OpenAPI 3 spec generation                        | Not started  |
+
+## TLS / mTLS
+
+The lab default is plain HTTP — no client-cert checks. Production
+deployments enable TLS by setting `--tls-cert` and `--tls-key`, and
+enable mTLS for ES2+ by additionally setting `--es2plus-client-ca`
+to a PEM bundle of CAs whose-issued client certs the gateway will
+accept.
+
+The mTLS gate is **path-scoped**: a request to `/gsma/rsp2/es2plus/*`
+without a verified client cert chain is rejected with `401`, while
+the operator UI and `/v1/*` proxies continue to work over the same
+listener without a client cert. This separation matters because the
+two surfaces use different auth realms (BSS-side mTLS vs operator
+OIDC); they share the listener and certificate.
+
+The Helm chart wires this via two Secret references on the
+`gateway` block:
+
+```yaml
+gateway:
+  tls:
+    serverSecret: aether-tls          # tls.crt + tls.key
+    es2plusClientCASecret: aether-bss-ca   # ca.crt
+```
+
+Both Secrets are operator-supplied; the chart does not generate
+TLS material.
 
 ## Wire format
 
