@@ -1,0 +1,270 @@
+# Dependabot configuration for the Aether monorepo.
+#
+# Policy (also documented in CONTRIBUTING.md):
+#
+# - **Security updates** are surfaced by Dependabot whenever GitHub
+#   publishes an advisory. Maintainers triage these on the same
+#   working day; no waiting for the weekly batch.
+# - **Version updates** run weekly. Patch + minor bumps are grouped
+#   per ecosystem (e.g. one PR per week per Go module). Major bumps
+#   land as their own PRs because they often need code changes.
+# - The Aether project ships SAS-SM-relevant code; we do NOT
+#   auto-merge anything. Every PR runs the full CI suite (build,
+#   test, helm lint, terraform validate, openapi lint, conformance,
+#   prometheus rules, grafana JSON, postgres + softhsm integration)
+#   and a maintainer reviews before merge.
+#
+# Notes on the file structure:
+#
+# - One entry per go.mod. Go workspaces don't centralise dependency
+#   resolution; Dependabot needs to know about each module that has
+#   its own go.sum. The `directory` field uses the Aether layout
+#   exactly.
+# - One entry per Dockerfile (services/*/Dockerfile + ui/admin/
+#   Dockerfile). Base images get bumped on the same weekly cadence
+#   as Go deps.
+# - GitHub Actions get their own ecosystem entry — separate cadence
+#   from the code dependencies because Actions ship more
+#   aggressively and benefit from staying current.
+# - npm covers the operator UI under ui/admin.
+
+version: 2
+
+# ---- Default-grouped reviewers --------------------------------------------
+# Maintainer assignment is via CODEOWNERS; we don't duplicate it here.
+
+updates:
+  # ---- GitHub Actions -----------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: ["*"]
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(deps): "
+
+  # ---- npm (operator UI) --------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/ui/admin"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    groups:
+      next:
+        patterns:
+          - "next"
+          - "next-auth"
+          - "@types/react*"
+          - "react"
+          - "react-dom"
+      types:
+        patterns:
+          - "@types/*"
+      lint-and-style:
+        patterns:
+          - "eslint*"
+          - "tailwind*"
+          - "postcss*"
+          - "autoprefixer"
+      typescript:
+        patterns:
+          - "typescript"
+    labels:
+      - "dependencies"
+      - "ui"
+    commit-message:
+      prefix: "ui(deps): "
+
+  # ---- Docker base images -------------------------------------------------
+  # One entry per Dockerfile because Dependabot scopes updates per
+  # directory.
+  - package-ecosystem: "docker"
+    directory: "/services/audit"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "audit(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/certmgr"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "certmgr(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/eim"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "eim(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/gateway"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "gateway(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/hsm-broker"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "hsm-broker(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/profile-builder"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "profile-builder(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/smdp-plus"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "smdp-plus(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/services/smds"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "smds(deps): " }
+
+  - package-ecosystem: "docker"
+    directory: "/ui/admin"
+    schedule: { interval: "weekly", day: "tuesday", time: "09:00", timezone: "Etc/UTC" }
+    labels: ["dependencies", "docker"]
+    commit-message: { prefix: "ui(deps): " }
+
+  # ---- Go modules ---------------------------------------------------------
+  # Workspaces don't share a go.sum; one entry per module. Grouping is
+  # per-module rather than across modules so per-service test suites
+  # cover the actual upgrade path each PR introduces.
+
+  - package-ecosystem: "gomod"
+    directory: "/pkg/asn1/sgp22/go"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "asn1(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/pkg/certmgrclient"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "certmgrclient(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/pkg/crypto"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "crypto(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/pkg/hsmclient"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "hsmclient(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/audit"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "audit(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/certmgr"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "certmgr(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/eim"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "eim(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/gateway"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "gateway(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/hsm-broker"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "hsm-broker(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/profile-builder"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "profile-builder(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/smdp-plus"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "smdp-plus(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/services/smds"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "smds(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/test/e2e"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "test/e2e(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/tools/aether-verify-anchor"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "verify-anchor(deps): " }
+
+  - package-ecosystem: "gomod"
+    directory: "/tools/conformance/runner"
+    schedule: { interval: "weekly", day: "wednesday", time: "09:00", timezone: "Etc/UTC" }
+    open-pull-requests-limit: 3
+    groups: { patch-and-minor: { update-types: ["patch", "minor"] } }
+    labels: ["dependencies", "go"]
+    commit-message: { prefix: "conformance(deps): " }

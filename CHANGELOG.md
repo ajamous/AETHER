@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Dependabot configuration (`.github/dependabot.yml`):
+- Closes a supply-chain hygiene gap: every previous dependency
+  bump was hand-rolled. Dependabot now surfaces upstream releases
+  automatically across four ecosystems and every `go.mod` /
+  Dockerfile in the repository.
+- 26 update entries: GitHub Actions (one grouped PR weekly), npm
+  under `ui/admin/` (grouped by next/auth + types + lint +
+  typescript), Docker base images (one PR per service's
+  Dockerfile), and Go modules (one PR per `go.mod` — Go
+  workspaces don't share a `go.sum`, so Dependabot needs an
+  entry per module).
+- Cadence per ecosystem spreads the maintainer load across the
+  week: GitHub Actions + npm on Monday 09:00 UTC, Docker on
+  Tuesday, Go modules on Wednesday. Patch + minor Go bumps are
+  grouped per module; major bumps land as their own PRs.
+- Security advisories are surfaced same-day regardless of the
+  weekly cadence (GitHub default).
+- **No auto-merge.** Aether ships SAS-SM-relevant code; every
+  Dependabot PR runs the full CI suite (build, test, helm lint,
+  terraform validate, openapi lint, conformance, prometheus
+  rules, grafana JSON, postgres + softhsm integration) and gets
+  maintainer review before merge.
+- Commit-message prefixes follow the project's `<scope>(deps): `
+  convention so the bot's PRs sort cleanly alongside human PRs
+  in the changelog.
+
+CONTRIBUTING.md gains a "Dependency updates" section with the
+ecosystem matrix, the no-auto-merge policy, and pointers for
+manual dependency PRs to use the `dependencies` label so they
+sort alongside the bot's queue.
+
 Grafana dashboard refresh
 (`deployments/observability/grafana/dashboards/`):
 - Closes a gap created by recent counter-emitting PRs that didn't
