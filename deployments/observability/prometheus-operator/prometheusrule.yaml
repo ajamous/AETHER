@@ -111,6 +111,33 @@ spec:
             summary: HSM broker reports unhealthy
             description: backend={{ $labels.backend }}. Signing flows downstream are failing.
 
+        - alert: AetherHSMSignLatencyP99
+          expr: |
+            histogram_quantile(0.99,
+              sum by (le) (rate(aether_hsm_sign_duration_seconds_bucket[5m]))
+            ) > 0.25
+          for: 10m
+          labels:
+            severity: sev-2
+            aether_component: hsm-broker
+          annotations:
+            summary: HSM Sign p99 latency > 250ms
+
+    - name: aether-gateway-es2plus
+      interval: 60s
+      rules:
+        - alert: AetherES2PlusUnauthorizedSpike
+          expr: |
+            sum by (reason) (
+              rate(aether_gateway_es2plus_unauthorized_total[5m])
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: sev-2
+            aether_component: gateway
+          annotations:
+            summary: Spike in ES2+ 401s ({{ $labels.reason }})
+
     - name: aether-postgres
       interval: 60s
       rules:

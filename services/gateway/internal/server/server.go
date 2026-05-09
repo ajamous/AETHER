@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ajamous/aether/services/gateway/internal/metrics"
 	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
 
@@ -34,6 +35,11 @@ type Server struct {
 	// es2plusClientCAs is non-nil when ES2+ mTLS is enforced.
 	tlsConfig        *tls.Config
 	es2plusClientCAs *x509.CertPool
+
+	// metrics exposed at /metrics. The 401 counter on the ES2+
+	// surface drives the AetherES2PlusUnauthorizedSpike alert in
+	// deployments/observability/.
+	es2plusUnauthorized *metrics.LabeledCounter
 }
 
 type Config struct {
@@ -70,6 +76,12 @@ func New(cfg Config) (*Server, error) {
 		httpClient:       &http.Client{Timeout: 10 * time.Second},
 		tlsConfig:        tlsCfg,
 		es2plusClientCAs: clientCAs,
+		es2plusUnauthorized: metrics.NewLabeledCounter(
+			"aether_gateway_es2plus_unauthorized_total",
+			"Count of 401 Unauthorized responses on /gsma/rsp2/es2plus/* by reason.",
+			"reason",
+			"no_tls", "no_client_cert", "chain_invalid",
+		),
 	}, nil
 }
 
@@ -91,13 +103,20 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/trust-store", s.proxy("certmgr", "/v1/trust-store"))
 	mux.HandleFunc("GET /v1/smds/events", s.proxy("smds", "/v1/events"))
 	mux.HandleFunc("GET /v1/eim/devices", s.proxy("eim", "/v1/devices"))
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
 	// Wrap in the ES2+ mTLS gate. When es2plusClientCAs is nil
 	// (mTLS disabled, lab default) this is a no-op pass-through;
 	// when populated it requires a verified client cert on
 	// /gsma/rsp2/es2plus/* and lets everything else through
-	// unchanged.
-	return tlsconf.ES2PlusMTLSMiddleware(s.es2plusClientCAs)(mux)
+	// unchanged. The reporter callback increments per-reason 401
+	// counters that drive the AetherES2PlusUnauthorizedSpike alert.
+	return tlsconf.ES2PlusMTLSMiddleware(s.es2plusClientCAs, s.es2plusUnauthorized)(mux)
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	s.es2plusUnauthorized.Write(w)
 }
 
 // ListenAndServe runs the gateway. If the configured mode includes

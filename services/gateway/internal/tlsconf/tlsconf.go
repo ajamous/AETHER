@@ -132,11 +132,26 @@ func loadCAPool(path string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
+// UnauthorizedReporter is invoked when the middleware rejects an
+// ES2+ request. The gateway's metrics package implements this to
+// increment the per-reason 401 counter that drives the
+// AetherES2PlusUnauthorizedSpike alert.
+type UnauthorizedReporter interface {
+	Inc(reason string)
+}
+
 // ES2PlusMTLSMiddleware returns middleware that requires a
 // verified client cert on ES2+ paths and lets everything else
 // through. If pool is nil, mTLS is disabled and the middleware
-// is a no-op.
-func ES2PlusMTLSMiddleware(pool *x509.CertPool) func(http.Handler) http.Handler {
+// is a no-op. reporter may be nil; when non-nil, it is called
+// with one of "no_tls", "no_client_cert", or "chain_invalid"
+// for each rejected request.
+func ES2PlusMTLSMiddleware(pool *x509.CertPool, reporter UnauthorizedReporter) func(http.Handler) http.Handler {
+	report := func(reason string) {
+		if reporter != nil {
+			reporter.Inc(reason)
+		}
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if pool == nil || !strings.HasPrefix(r.URL.Path, "/gsma/rsp2/es2plus/") {
@@ -144,11 +159,13 @@ func ES2PlusMTLSMiddleware(pool *x509.CertPool) func(http.Handler) http.Handler 
 				return
 			}
 			if r.TLS == nil {
+				report("no_tls")
 				writeProblem(w, http.StatusUpgradeRequired,
 					"ES2+ requires TLS; reconnect over HTTPS")
 				return
 			}
 			if len(r.TLS.PeerCertificates) == 0 {
+				report("no_client_cert")
 				writeProblem(w, http.StatusUnauthorized,
 					"ES2+ requires a client certificate (mTLS)")
 				return
@@ -166,6 +183,7 @@ func ES2PlusMTLSMiddleware(pool *x509.CertPool) func(http.Handler) http.Handler 
 				Intermediates: intermediates,
 				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageAny},
 			}); err != nil {
+				report("chain_invalid")
 				writeProblem(w, http.StatusUnauthorized,
 					fmt.Sprintf("client cert chain does not verify: %v", err))
 				return

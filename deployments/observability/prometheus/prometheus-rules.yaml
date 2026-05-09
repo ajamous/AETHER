@@ -157,11 +157,52 @@ groups:
             (smdp-plus ServerSigned1) are failing. Inspect the
             configured PKCS#11 backend.
 
-  # Sign-latency histograms and gateway 401 counters are listed
-  # as planned alerts in the README but the underlying metrics
-  # are not yet emitted by the services. Adding them is a focused
-  # follow-up; see deployments/observability/README.md
-  # §"Pending instrumentation".
+      - alert: AetherHSMSignLatencyP99
+        # Sign p99 > 250ms for 10 minutes — the SLO threshold
+        # called out in reference-aws.md. The hsm-broker emits
+        # aether_hsm_sign_duration_seconds_bucket directly.
+        expr: |
+          histogram_quantile(0.99,
+            sum by (le) (rate(aether_hsm_sign_duration_seconds_bucket[5m]))
+          ) > 0.25
+        for: 10m
+        labels:
+          severity: sev-2
+          aether_component: hsm-broker
+        annotations:
+          summary: HSM Sign p99 latency > 250ms
+          description: |
+            HSM Sign operations are slower than the SLO. Check the
+            configured PKCS#11 backend's load and any network path
+            between hsm-broker and the HSM. Sustained latency
+            here cascades into smdp-plus ES9+ response time.
+
+  - name: aether-gateway-es2plus
+    interval: 60s
+    rules:
+      - alert: AetherES2PlusUnauthorizedSpike
+        # Spike of 401s on /gsma/rsp2/es2plus/* over the last 5
+        # minutes. Likely misconfigured BSS, expired client cert,
+        # or active probing. The gateway's
+        # aether_gateway_es2plus_unauthorized_total counter is
+        # labelled by reason (no_tls / no_client_cert /
+        # chain_invalid) so the on-call can route quickly.
+        expr: |
+          sum by (reason) (
+            rate(aether_gateway_es2plus_unauthorized_total[5m])
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: sev-2
+          aether_component: gateway
+        annotations:
+          summary: Spike in ES2+ 401s ({{ $labels.reason }})
+          description: |
+            More than 0.5 req/s of 401 Unauthorized responses on
+            /gsma/rsp2/es2plus/* with reason={{ $labels.reason }}
+            over the last 5 minutes. See
+            docs/sas-sm/incident-response.md §"Mitigations
+            by symptom".
 
   - name: aether-postgres
     interval: 60s
