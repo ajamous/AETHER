@@ -93,6 +93,8 @@ nav:
       - 'RBAC and SoD': sas-sm/rbac.md
       - 'Audit log retention': sas-sm/audit-retention.md
       - 'Reference AWS deployment': sas-sm/reference-aws.md
+      - 'Reference GCP deployment': sas-sm/reference-gcp.md
+      - 'Reference on-prem deployment': sas-sm/reference-onprem.md
       - 'Disaster recovery': sas-sm/disaster-recovery.md
       - 'Incident response': sas-sm/incident-response.md
       - 'Common audit findings': sas-sm/common-findings.md

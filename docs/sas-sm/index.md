@@ -23,8 +23,8 @@ for the binding statement.
 | [RBAC + segregation-of-duties templates](rbac.md)                      | Implemented   |
 | [Audit log retention defaults](audit-retention.md)                     | Implemented   |
 | [Reference deployment topology — AWS GSMA-certified regions](reference-aws.md) | Implemented   |
-| Reference deployment topology — GCP                                    | Not started   |
-| Reference deployment topology — on-prem (Thales / Utimaco)            | Not started   |
+| [Reference deployment topology — GCP](reference-gcp.md)                | Implemented   |
+| [Reference deployment topology — on-prem (Thales / Utimaco)](reference-onprem.md) | Implemented   |
 | [Common audit findings and how Aether's defaults pre-empt them](common-findings.md) | Implemented   |
 | [Annual recertification checklist](recertification-checklist.md)       | Implemented   |
 | [Disaster recovery runbook](disaster-recovery.md)                      | Implemented   |
