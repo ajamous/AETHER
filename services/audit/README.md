@@ -11,10 +11,31 @@ requirements.
 | ------------------------------------------------ | ------------- |
 | In-memory hash-chained ledger                    | Implemented   |
 | HTTP API: append, list, verify                   | Implemented   |
-| Postgres-backed ledger                            | Not started   |
+| Postgres-backed ledger                            | Implemented   |
 | NATS subscriber                                   | Not started   |
 | SSE streaming                                     | Not started   |
 | Full-text search                                  | Not started   |
+
+## Storage modes
+
+The default is the in-memory ledger — fine for unit tests and the
+local lab. Pass `--pg-url` (or set `AETHER_PG_URL`) to use the
+Postgres-backed ledger:
+
+```
+go run ./cmd/audit --pg-url=postgres://aether:aether@localhost:5432/aether
+```
+
+The schema is created on startup if missing. The `payload` column is
+`BYTEA`, not `JSONB`, because the hash chain is over exact bytes and
+JSONB normalises whitespace. Concurrent appends use serializable
+transactions; conflicts retry transparently. A `TestPGLedger_Concurrent
+AppendsKeepChainIntact` test runs 8 writers × 25 appends each through
+the chain to lock that contract.
+
+For SAS-SM deployments, follow the schema comment and `REVOKE UPDATE,
+DELETE ON audit_entries FROM aether_app` so even an application-level
+bug can't tamper with the chain.
 
 ## How the chain works
 

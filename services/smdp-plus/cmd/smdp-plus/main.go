@@ -24,19 +24,39 @@ func main() {
 
 func run() error {
 	var (
-		listen   = flag.String("listen", ":8443", "HTTP(S) listen address")
-		tlsCert  = flag.String("tls-cert", "", "TLS server cert (DPtls)")
-		tlsKey   = flag.String("tls-key", "", "TLS server key")
-		_        = flag.String("certmgr", "", "certmgr base URL (reserved)")
-		_        = flag.String("hsm-broker", "", "hsm-broker base URL (reserved)")
-		ttl      = flag.Duration("session-ttl", 10*time.Minute, "in-memory session TTL")
+		listen  = flag.String("listen", ":8443", "HTTP(S) listen address")
+		tlsCert = flag.String("tls-cert", "", "TLS server cert (DPtls)")
+		tlsKey  = flag.String("tls-key", "", "TLS server key")
+		_       = flag.String("certmgr", "", "certmgr base URL (reserved)")
+		_       = flag.String("hsm-broker", "", "hsm-broker base URL (reserved)")
+		ttl     = flag.Duration("session-ttl", 10*time.Minute, "session TTL")
+		pgURL   = flag.String("pg-url", "", "PostgreSQL URL; if empty, the in-memory session store is used (lab default)")
 	)
 	flag.Parse()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	store := session.NewMemoryStore(*ttl)
-	srv := server.New(store)
+	if env := os.Getenv("AETHER_PG_URL"); env != "" && *pgURL == "" {
+		*pgURL = env
+	}
 
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	var store session.Store
+	if *pgURL == "" {
+		logger.Warn("smdp-plus using in-memory session store; sessions lost on restart")
+		store = session.NewMemoryStore(*ttl)
+	} else {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		pg, err := session.NewPGStore(ctx, *pgURL, *ttl)
+		if err != nil {
+			return fmt.Errorf("postgres session store: %w", err)
+		}
+		defer pg.Close()
+		store = pg
+		logger.Info("smdp-plus using postgres session store")
+	}
+
+	srv := server.New(store)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

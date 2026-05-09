@@ -29,11 +29,11 @@ The table below is the source of truth.
 | `pkg/crypto`                  | Implemented   | ECDSA P-256, ECKA, X9.63-SHA-256 KDF, AES-128-GCM BSP. Brainpool P-256 r1 stubbed |
 | `services/hsm-broker`         | Implemented   | Memory + SoftHSM backends with real ECDSA Sign / ECKA Derive / GenerateKeyPair / ListKeys verified against SoftHSM v2; cloud HSM backends pending |
 | `services/certmgr`            | Implemented   | Cert chain load/verify, lab/prod modes, expiry metrics, lab-chain generator |
-| `services/smdp-plus`          | Skeleton      | ES9+ endpoint shapes + state machine; BPP returns 501 until SAIP codec lands |
-| `services/smds`               | Skeleton      | ES11 + ES12 with end-to-end discovery flow tested in-memory; signing pending |
+| `services/smdp-plus`          | Skeleton      | ES9+ endpoint shapes + state machine, in-memory and Postgres-backed session stores; BPP returns 501 until SAIP codec lands |
+| `services/smds`               | Skeleton      | ES11 + ES12 with end-to-end discovery flow, in-memory and Postgres-backed event stores; signing pending |
 | `services/eim`                | Not started   | SGP.32                                             |
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
-| `services/audit`              | Implemented   | Hash-chained ledger with verify; in-memory store (Postgres backend pending) |
+| `services/audit`              | Implemented   | Hash-chained ledger with verify, in-memory and Postgres-backed stores; serializable concurrent appends verified |
 | `services/gateway`            | Skeleton      | ES2+ shapes + REST proxy to upstream services; OIDC/mTLS/rate-limit pending |
 | `ui/admin`                    | Skeleton      | Next.js 15 read-only console: dashboard, templates, certs, audit |
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |

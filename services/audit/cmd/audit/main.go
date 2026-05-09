@@ -22,13 +22,35 @@ func main() {
 }
 
 func run() error {
-	listen := flag.String("listen", ":8447", "HTTP listen address")
+	var (
+		listen = flag.String("listen", ":8447", "HTTP listen address")
+		pgURL  = flag.String("pg-url", "", "PostgreSQL URL; if empty, the in-memory ledger is used (lab default)")
+	)
 	flag.Parse()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	ledger := chain.NewLedger()
-	srv := server.New(ledger)
+	if env := os.Getenv("AETHER_PG_URL"); env != "" && *pgURL == "" {
+		*pgURL = env
+	}
 
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	var backend chain.Backend
+	if *pgURL == "" {
+		logger.Warn("audit using in-memory ledger; data lost on restart")
+		backend = chain.NewLedger()
+	} else {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		pg, err := chain.NewPGLedger(ctx, *pgURL)
+		if err != nil {
+			return fmt.Errorf("postgres ledger: %w", err)
+		}
+		defer pg.Close()
+		backend = pg
+		logger.Info("audit using postgres ledger")
+	}
+
+	srv := server.New(backend)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

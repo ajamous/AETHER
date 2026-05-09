@@ -82,6 +82,41 @@ jobs:
           args: --timeout=5m
         continue-on-error: true
 
+  postgres-integration:
+    name: postgres persistence integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: aether
+          POSTGRES_PASSWORD: aether
+          POSTGRES_DB: aether_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aether -d aether_test"
+          --health-interval 2s
+          --health-timeout 2s
+          --health-retries 30
+    env:
+      AETHER_PG_URL: postgres://aether:aether@127.0.0.1:5432/aether_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: audit ledger integration tests
+        working-directory: services/audit
+        run: go test -count=1 ./internal/chain/...
+      - name: smds event store integration tests
+        working-directory: services/smds
+        run: go test -count=1 ./internal/events/...
+      - name: smdp-plus session store integration tests
+        working-directory: services/smdp-plus
+        run: go test -count=1 ./internal/session/...
+
   softhsm-integration:
     name: hsm-broker softhsm integration
     runs-on: ubuntu-latest

@@ -14,10 +14,10 @@ import (
 )
 
 type Server struct {
-	ledger *chain.Ledger
+	ledger chain.Backend
 }
 
-func New(l *chain.Ledger) *Server { return &Server{ledger: l} }
+func New(l chain.Backend) *Server { return &Server{ledger: l} }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()

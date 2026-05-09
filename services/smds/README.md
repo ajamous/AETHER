@@ -24,14 +24,13 @@ activation code or scanning a QR.
 | ES11 GetEvents (§5.5.3)                          | Implemented (returns matching events for an EID) |
 | Root SM-DS role                                  | Implemented (single-tier)  |
 | Alternative SM-DS / cascade                      | Not started   |
-| Postgres-backed event store                      | Not started   |
+| Postgres-backed event store                      | Implemented   |
 | HTTPS + mTLS                                     | Not started   |
 | Push notification (vs polling) channel           | Not started   |
 
-The in-memory event store is intentional for Phase 3: it lets the
-discovery flow be exercised end-to-end against a real LPA in the
-lab without dragging in Postgres before the broader audit and
-session persistence work lands.
+Storage: the in-memory store is the default. Pass `--pg-url` (or set
+`AETHER_PG_URL`) to use Postgres. The `(eid, event_id)` primary key
+plus an `ON CONFLICT DO UPDATE` clause keeps registration idempotent.
 
 ## How a discovery handshake looks
 
