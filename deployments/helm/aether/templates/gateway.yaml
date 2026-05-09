@@ -15,6 +15,14 @@
 {{- if $cfg.tls.es2plusClientCASecret -}}
 {{- $args = append $args "--es2plus-client-ca=/etc/aether/es2plus-ca/ca.crt" -}}
 {{- end -}}
+{{- if and $cfg.rateLimit (gt (default 0.0 $cfg.rateLimit.rps | float64) 0.0) (gt (int (default 0 $cfg.rateLimit.burst)) 0) -}}
+{{- $args = append $args (printf "--rate-limit-rps=%v" $cfg.rateLimit.rps) -}}
+{{- $args = append $args (printf "--rate-limit-burst=%d" (int $cfg.rateLimit.burst)) -}}
+{{- end -}}
+{{- if and $cfg.oidc $cfg.oidc.issuer $cfg.oidc.audience -}}
+{{- $args = append $args (printf "--oidc-issuer=%s" $cfg.oidc.issuer) -}}
+{{- $args = append $args (printf "--oidc-audience=%s" $cfg.oidc.audience) -}}
+{{- end -}}
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -85,6 +85,60 @@ var catalogue = []Case{
 		Module: "services/gateway", Package: "./internal/server/...",
 		RunPattern: "^TestGateway_RateLimit_RejectsAfterBurst$",
 	},
+	{
+		Family: "Admin",
+		Title:  "OIDC rejects /v1/* without Bearer; /v1/health bypasses; counter advances",
+		Module: "services/gateway", Package: "./internal/server/...",
+		RunPattern: "^TestGateway_OIDC_RejectsAdminWithoutBearer$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC accepts a valid Bearer token (RS256) and proxies to upstream",
+		Module: "services/gateway", Package: "./internal/server/...",
+		RunPattern: "^TestGateway_OIDC_AcceptsValidBearer$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier accepts RS256 happy path",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_RS256_HappyPath$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier accepts ES256 happy path",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_ES256_HappyPath$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier rejects HS256 (symmetric) tokens",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_RejectsHS256$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier rejects expired tokens",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_RejectsExpired$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier rejects wrong issuer",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_RejectsWrongIssuer$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier rejects wrong audience",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_RejectsWrongAudience$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OIDC verifier rejects tampered signature",
+		Module: "services/gateway", Package: "./internal/oidc/...",
+		RunPattern: "^TestVerify_RejectsTamperedSignature$",
+	},
 
 	// -- ES9+ ----------------------------------------------------
 	{

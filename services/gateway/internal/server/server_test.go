@@ -2,12 +2,22 @@ package server
 
 import (
 	"bytes"
+	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ajamous/aether/services/gateway/internal/oidc"
 )
 
 func TestGateway_Health(t *testing.T) {
@@ -144,4 +154,156 @@ func TestGateway_RateLimit_RejectsAfterBurst(t *testing.T) {
 	if !strings.Contains(got, `class="es2plus"} 1`) {
 		t.Errorf("expected rate-limit counter for es2plus to be 1; got:\n%s", got)
 	}
+}
+
+// TestGateway_OIDC_RejectsAdminWithoutBearer drives the wired OIDC
+// middleware end to end: /v1/templates without a token returns 401,
+// /v1/health bypasses, the per-reason counter advances, and the
+// counter is exposed on /metrics.
+func TestGateway_OIDC_RejectsAdminWithoutBearer(t *testing.T) {
+	idp := newGatewayFakeIdP(t)
+	v, err := oidc.Discover(context.Background(), oidc.Config{
+		Issuer:   idp.URL,
+		Audience: "aether-admin",
+	})
+	if err != nil {
+		t.Fatalf("oidc discover: %v", err)
+	}
+
+	s, _ := New(Config{ProfileBuilder: "http://pb", OIDCVerifier: v})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+
+	// /v1/health bypasses unauthenticated.
+	resp, err := http.Get(srv.URL + "/v1/health")
+	if err != nil {
+		t.Fatalf("/v1/health: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("/v1/health status = %d (must bypass OIDC)", resp.StatusCode)
+	}
+
+	// /v1/templates without a Bearer is rejected.
+	resp, err = http.Get(srv.URL + "/v1/templates")
+	if err != nil {
+		t.Fatalf("get /v1/templates: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/v1/templates status = %d, want 401", resp.StatusCode)
+	}
+	if !strings.HasPrefix(resp.Header.Get("WWW-Authenticate"), "Bearer ") {
+		t.Errorf("WWW-Authenticate = %q", resp.Header.Get("WWW-Authenticate"))
+	}
+
+	// Counter should reflect the no_token rejection.
+	mr, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("/metrics: %v", err)
+	}
+	defer mr.Body.Close()
+	buf, _ := io.ReadAll(mr.Body)
+	got := string(buf)
+	if !strings.Contains(got, "aether_gateway_admin_unauthorized_total") {
+		t.Errorf("metrics output missing admin counter:\n%s", got)
+	}
+	if !strings.Contains(got, `reason="no_token"} 1`) {
+		t.Errorf("expected no_token counter to be 1, got:\n%s", got)
+	}
+}
+
+// TestGateway_OIDC_AcceptsValidBearer confirms a token signed by
+// the IdP passes the gate and reaches the proxy logic.
+func TestGateway_OIDC_AcceptsValidBearer(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"templates":["lab-mvno"]}`))
+	}))
+	defer upstream.Close()
+
+	idp := newGatewayFakeIdP(t)
+	v, _ := oidc.Discover(context.Background(), oidc.Config{
+		Issuer:   idp.URL,
+		Audience: "aether-admin",
+	})
+	s, _ := New(Config{ProfileBuilder: upstream.URL, OIDCVerifier: v})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+
+	tok := idp.Mint(t, map[string]any{
+		"iss": idp.URL,
+		"aud": "aether-admin",
+		"sub": "operator-1",
+		"iat": time.Now().Unix(),
+		"exp": time.Now().Add(5 * time.Minute).Unix(),
+	})
+	req, _ := http.NewRequest("GET", srv.URL+"/v1/templates", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// gwFakeIdP is a minimal RS256 IdP for the server-level integration
+// tests. We don't reuse oidc_test.go's fakeIdP because it lives in a
+// different package.
+type gwFakeIdP struct {
+	URL    string
+	priv   *rsa.PrivateKey
+	kid    string
+	server *httptest.Server
+}
+
+func newGatewayFakeIdP(t *testing.T) *gwFakeIdP {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("rsa keygen: %v", err)
+	}
+	idp := &gwFakeIdP{priv: priv, kid: "rsa-1"}
+	mux := http.NewServeMux()
+	idp.server = httptest.NewServer(mux)
+	idp.URL = idp.server.URL
+	t.Cleanup(idp.server.Close)
+
+	mux.HandleFunc("/.well-known/openid-configuration", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"issuer":   idp.URL,
+			"jwks_uri": idp.URL + "/jwks",
+		})
+	})
+	mux.HandleFunc("/jwks", func(w http.ResponseWriter, r *http.Request) {
+		nB := base64.RawURLEncoding.EncodeToString(priv.PublicKey.N.Bytes())
+		var eBuf [4]byte
+		binary.BigEndian.PutUint32(eBuf[:], uint32(priv.PublicKey.E))
+		i := 0
+		for i < 3 && eBuf[i] == 0 {
+			i++
+		}
+		eB := base64.RawURLEncoding.EncodeToString(eBuf[i:])
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"keys": []map[string]any{
+				{"kty": "RSA", "kid": idp.kid, "use": "sig", "alg": "RS256", "n": nB, "e": eB},
+			},
+		})
+	})
+	return idp
+}
+
+// Mint signs a JWT with the IdP's RSA key.
+func (i *gwFakeIdP) Mint(t *testing.T, payload map[string]any) string {
+	t.Helper()
+	header := map[string]any{"alg": "RS256", "kid": i.kid, "typ": "JWT"}
+	hb, _ := json.Marshal(header)
+	pb, _ := json.Marshal(payload)
+	signingInput := base64.RawURLEncoding.EncodeToString(hb) + "." + base64.RawURLEncoding.EncodeToString(pb)
+	digest := sha256.Sum256([]byte(signingInput))
+	sig, err := rsa.SignPKCS1v15(rand.Reader, i.priv, crypto.SHA256, digest[:])
+	if err != nil {
+		t.Fatalf("rsa sign: %v", err)
+	}
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig)
 }

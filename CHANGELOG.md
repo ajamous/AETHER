@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Gateway OIDC for `/v1/*` admin paths (`services/gateway/internal/oidc/`):
+- New `oidc` package: stdlib-only JWT verifier with discovery,
+  JWKS cache, and middleware. The package is intentionally
+  stdlib-only — a third-party JWT library would be a non-trivial
+  supply-chain surface for the SAS-SM-relevant admin auth gate.
+- Verifier discovers `jwks_uri` via the issuer's
+  `/.well-known/openid-configuration`. Supported algorithms are
+  **RS256** and **ES256**. HS\*, RS384, RS512, ES384, ES512, and
+  EdDSA are deliberately rejected — admin tokens must be
+  asymmetrically signed by the IdP.
+- JWKS is cached for 5 minutes by default; an unknown `kid`
+  triggers an immediate refresh regardless of TTL.
+- Validation: signature, `iss == configured issuer`, `aud
+  contains configured audience`, `exp > now` (no clock skew
+  tolerance — IdP and gateway clocks should be NTP-aligned), and
+  `nbf <= now` if present. Both string-form and array-form `aud`
+  claims are accepted per RFC 7519 §4.1.3.
+- Middleware applies only to `/v1/*` paths. `/v1/health` and
+  `/metrics` bypass unconditionally so kube-probes and
+  Prometheus scrape unauthenticated. Anything outside `/v1/*`
+  (notably `/gsma/rsp2/*`) bypasses too — that surface has its
+  own auth (mTLS + rate-limit). Verified subject + claims are
+  threaded into request context for downstream handlers.
+- 14 unit tests cover both happy paths (RS256 + ES256), every
+  rejection path (HS256, expired, not-yet-valid, wrong issuer,
+  wrong audience, unknown kid, tampered signature, malformed
+  in five flavours), array-form audience, JWKS refresh on
+  unknown kid, and the alternate `NewWithJWKS` constructor.
+  Plus 3 server-level integration tests that drive the wired
+  middleware end-to-end through the routing layer.
+- New `aether_gateway_admin_unauthorized_total{reason}` counter
+  exposed on `/metrics`, pre-loaded with the 10 documented
+  rejection reasons so the hot path is lock-free. Mirrors the
+  ES2+ 401 counter shape.
+- New main flags `--oidc-issuer` and `--oidc-audience`. Both
+  must be set to enable; lab default is disabled. Discovery
+  runs at startup with a 10-second timeout so a flaky IdP
+  doesn't make the gateway hang. Server warns at startup when
+  off — same explicit-default-off-with-warning pattern as the
+  mTLS and rate-limit gates.
+- Helm chart: new `gateway.oidc.issuer` + `gateway.oidc.audience`
+  values (and a parallel `gateway.rateLimit.rps` + `.burst`,
+  filling in a previously-undocumented gap in the chart). Both
+  default to disabled. `helm lint` + `helm template` clean.
+- Conformance harness gains 9 cases (one new "Admin" family)
+  exercising RS256 happy, ES256 happy, HS256 rejection, expired,
+  wrong issuer, wrong audience, tampered signature, plus the
+  two server-level integration tests; 50 total now (was 41).
+
+Status row updates:
+- `services/gateway`: Partial → **Implemented**. The "OIDC
+  pending" caveat is closed; the gateway now has TLS + ES2+
+  mTLS + rate-limit + OIDC, all opt-in.
+- Conformance harness: 41 → 50 cases across 9 families.
+
 Terraform (`deployments/terraform/azure/`):
 - Azure reference deployment as IaC, third in the cloud trifecta
   alongside AWS and GCP. Stands up the topology described in
