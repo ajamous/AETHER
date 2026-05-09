@@ -11,6 +11,7 @@ use (
 	./pkg/hsmclient
 	./services/audit
 	./services/certmgr
+	./services/eim
 	./services/gateway
 	./services/hsm-broker
 	./services/profile-builder

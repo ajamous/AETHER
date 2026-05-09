@@ -6,6 +6,7 @@ const NAV = [
   { href: '/templates', label: 'Profile templates' },
   { href: '/certs', label: 'Certificates' },
   { href: '/smds', label: 'Discovery (SM-DS)' },
+  { href: '/eim', label: 'IoT devices (eIM)' },
   { href: '/audit', label: 'Audit log' },
   { href: '/about', label: 'About' },
 ];

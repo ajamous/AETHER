@@ -23,6 +23,7 @@ type Server struct {
 	smdpPlus       string
 	certmgr        string
 	smds           string
+	eim            string
 	httpClient     *http.Client
 }
 
@@ -31,6 +32,7 @@ type Config struct {
 	SMDPPlus       string
 	CertMgr        string
 	SMDS           string
+	EIM            string
 }
 
 func New(cfg Config) *Server {
@@ -39,6 +41,7 @@ func New(cfg Config) *Server {
 		smdpPlus:       strings.TrimRight(cfg.SMDPPlus, "/"),
 		certmgr:        strings.TrimRight(cfg.CertMgr, "/"),
 		smds:           strings.TrimRight(cfg.SMDS, "/"),
+		eim:            strings.TrimRight(cfg.EIM, "/"),
 		httpClient:     &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -60,6 +63,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/certs", s.proxy("certmgr", "/v1/certs"))
 	mux.HandleFunc("GET /v1/trust-store", s.proxy("certmgr", "/v1/trust-store"))
 	mux.HandleFunc("GET /v1/smds/events", s.proxy("smds", "/v1/events"))
+	mux.HandleFunc("GET /v1/eim/devices", s.proxy("eim", "/v1/devices"))
 
 	return mux
 }
@@ -202,6 +206,8 @@ func (s *Server) upstream(name string) string {
 		return s.certmgr
 	case "smds":
 		return s.smds
+	case "eim":
+		return s.eim
 	}
 	return ""
 }

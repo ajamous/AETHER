@@ -82,6 +82,39 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+eIM service (Phase 4 — SGP.32):
+- New `services/eim` exposes the operator's IoT control plane: a
+  device registry keyed by EID and a per-device command queue.
+- Device API: register / list / fetch / deregister.
+- Operator command API: enqueue / list. Four command kinds:
+  download_profile, enable_profile, disable_profile, delete_profile.
+- IPA-side API: GET /v1/ipa/{eid}/poll (atomically marks pending
+  commands as Delivered as they're returned) and POST
+  /v1/ipa/{eid}/commands/{id}/ack with state=completed|failed.
+  Acks update the device's last_seen.
+- Both backends behind a `Store` interface: in-memory (lab default)
+  and Postgres-backed with foreign-key cascade deletes from
+  devices to commands. Schema applied on startup. Postgres path
+  detects 23505 unique-violation as the duplicate-register signal.
+- Lifecycle tests cover: register, duplicate-register (409),
+  enqueue against unknown device (404), poll → deliver → ack,
+  re-poll after ack drops the command from the active set,
+  operator view retains completed history.
+- Wired into lab compose on :8449 with AETHER_PG_URL.
+- Gateway gains `--eim` flag and `/v1/eim/devices` proxy.
+- Admin UI gains a sidebar entry and `/eim` page listing
+  registered devices with EID, label, tags, registered_at,
+  last_seen.
+
+Honest gaps (called out in services/eim/README.md):
+- IPAd direct flow uses the command queue today; full SGP.32
+  IPAd profile-download integration with smdp-plus is the next
+  step.
+- IPAe (indirect, eIM-as-relay) flow is not started.
+- ES_eIM_Device authenticated transport (mTLS or signed commands
+  between eIM and IPA) is the production-readiness item.
+- Bulk operations / push notifications are not started.
+
 SM-DP+ eUICC verification on authenticateClient (SGP.22 §5.6.2 / §5.7.5):
 - New `pkg/certmgrclient`: Go client for certmgr. `TrustStore` and
   `Intermediates` return parsed *x509.Certificate slices ready for
