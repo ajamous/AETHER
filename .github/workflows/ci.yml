@@ -82,6 +82,40 @@ jobs:
           args: --timeout=5m
         continue-on-error: true
 
+  softhsm-integration:
+    name: hsm-broker softhsm integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: install softhsm2
+        run: sudo apt-get update && sudo apt-get install -y softhsm2
+      - name: init token
+        id: token
+        run: |
+          mkdir -p /tmp/softhsm-test/tokens
+          cat > /tmp/softhsm-test/softhsm2.conf <<'EOF'
+          directories.tokendir = /tmp/softhsm-test/tokens
+          objectstore.backend = file
+          log.level = ERROR
+          EOF
+          SOFTHSM2_CONF=/tmp/softhsm-test/softhsm2.conf softhsm2-util \
+            --init-token --slot 0 --label aether-ci --pin 1234 --so-pin 5678
+          SLOT=$(SOFTHSM2_CONF=/tmp/softhsm-test/softhsm2.conf softhsm2-util \
+            --show-slots | awk '/^Slot/{print $2; exit}')
+          echo "slot=$SLOT" >> "$GITHUB_OUTPUT"
+      - name: run integration tests
+        working-directory: services/hsm-broker
+        env:
+          AETHER_SOFTHSM_LIB: /usr/lib/softhsm/libsofthsm2.so
+          AETHER_SOFTHSM_SLOT: ${{ steps.token.outputs.slot }}
+          AETHER_SOFTHSM_PIN: '1234'
+          SOFTHSM2_CONF: /tmp/softhsm-test/softhsm2.conf
+        run: go test -count=1 ./internal/backend/softhsm/... -v
+
   ui:
     name: ui build
     runs-on: ubuntu-latest

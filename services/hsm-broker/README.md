@@ -13,11 +13,49 @@ for the rationale.
 | ---------------------------------------- | ------------- |
 | Broker Go interface (`internal/broker`)  | Implemented   |
 | Memory backend (test / CI fallback)      | Implemented   |
-| SoftHSM v2 backend (PKCS#11)             | Skeleton      |
+| SoftHSM v2 backend (PKCS#11)             | Implemented (Sign / GenerateKeyPair / DeriveKey / ListKeys; Decrypt pending) |
 | AWS CloudHSM / GCP / Azure / Thales / Utimaco backends | Not started |
 | HTTP+JSON server                         | Implemented   |
 | gRPC server                              | Pending — see "Wire format" below |
 | Health probe                             | Implemented   |
+
+### Running the SoftHSM integration tests
+
+The SoftHSM backend is verified end-to-end against a real PKCS#11
+module. The tests skip unless the environment is configured:
+
+```
+sudo apt-get install -y softhsm2
+mkdir -p /tmp/softhsm-test/tokens
+cat > /tmp/softhsm-test/softhsm2.conf <<'EOF'
+directories.tokendir = /tmp/softhsm-test/tokens
+objectstore.backend = file
+EOF
+SOFTHSM2_CONF=/tmp/softhsm-test/softhsm2.conf softhsm2-util \
+  --init-token --slot 0 --label aether-test --pin 1234 --so-pin 5678
+SLOT=$(SOFTHSM2_CONF=/tmp/softhsm-test/softhsm2.conf softhsm2-util --show-slots \
+       | awk '/^Slot/{print $2; exit}')
+
+AETHER_SOFTHSM_LIB=/usr/lib/softhsm/libsofthsm2.so \
+AETHER_SOFTHSM_SLOT=$SLOT \
+AETHER_SOFTHSM_PIN=1234 \
+SOFTHSM2_CONF=/tmp/softhsm-test/softhsm2.conf \
+  go test ./internal/backend/softhsm/... -v
+```
+
+CI runs this on every PR (see `.github/workflows/ci.yml`).
+
+### A note on the X9.63 KDF
+
+SoftHSM v2 supports `CKD_NULL` for `CKM_ECDH1_DERIVE` but not the
+SGP.22-mandated `CKD_SHA256_KDF`. The SoftHSM backend therefore
+takes the raw shared secret out of the HSM, runs `pkg/crypto/kdf`
+in process, and zeroes the intermediate. The derived session bytes
+stay in the broker process and are reachable only via the
+broker's own subsequent operations — they never travel over the
+network. Per-vendor backends (AWS CloudHSM, Luna, Utimaco) that
+implement `CKD_SHA256_KDF` natively will run the KDF on-chip when
+those backends land.
 
 The memory backend holds keys in process memory. **It is for tests and
 local development only.** Production deployments use SoftHSM (lab) or a
