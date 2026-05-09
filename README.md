@@ -23,25 +23,33 @@ The table below is the source of truth.
 
 | Component                     | Status        | Notes                                              |
 | ----------------------------- | ------------- | -------------------------------------------------- |
-| Repo bootstrap                | In progress   | License, governance, CI scaffolding landing now    |
-| Documentation skeleton        | Planned       | MkDocs Material site, ADRs                         |
-| ASN.1 toolchain               | Planned       | SGP.22 modules, asn1c-driven Go bindings           |
-| `pkg/crypto` (BSP, ECKA)      | Not started   | SGP.22 §2.6 profile protection primitives          |
-| `services/hsm-broker`         | Not started   | PKCS#11 façade, SoftHSM v2 backend first           |
-| `services/certmgr`            | Not started   | SGP.26 lab cert chain, expiry monitoring           |
-| `services/smdp-plus`          | Not started   | ES9+ endpoints, BPP generation                     |
+| Repo bootstrap                | Implemented   | License, governance, CI, Makefile, lint configs    |
+| Documentation skeleton        | Implemented   | MkDocs Material site, ADRs 0001-0005               |
+| ASN.1 toolchain               | Skeleton      | Build glue + starter type with round-trip tests; spec modules pending vendoring |
+| `pkg/crypto`                  | Implemented   | ECDSA P-256, ECKA, X9.63-SHA-256 KDF, AES-128-GCM BSP. Brainpool P-256 r1 stubbed |
+| `services/hsm-broker`         | Skeleton      | Memory backend implemented + tested; SoftHSM lifecycle wired, ops pending |
+| `services/certmgr`            | Implemented   | Cert chain load/verify, lab/prod modes, expiry metrics, lab-chain generator |
+| `services/smdp-plus`          | Skeleton      | ES9+ endpoint shapes + state machine; BPP returns 501 until SAIP codec lands |
 | `services/smds`               | Not started   | SGP.22 ES11/ES12                                   |
 | `services/eim`                | Not started   | SGP.32                                             |
-| `services/profile-builder`    | Not started   | TCA SAIP v2.x                                      |
-| `services/audit`              | Not started   | Hash-chained append-only log                       |
-| `services/gateway`            | Not started   | ES2+ for BSS, REST/GraphQL for UI                  |
+| `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
+| `services/audit`              | Implemented   | Hash-chained ledger with verify; in-memory store (Postgres backend pending) |
+| `services/gateway`            | Skeleton      | ES2+ shapes + REST proxy to upstream services; OIDC/mTLS/rate-limit pending |
 | `ui/admin`                    | Not started   | Next.js admin console                              |
-| Lab Docker Compose            | Not started   | `make lab-up` target wired but not yet functional  |
+| Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
 | Conformance harness (SGP.23)  | Not started   |                                                    |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
 | Helm chart                    | Not started   |                                                    |
 | Terraform modules             | Not started   |                                                    |
 | SAS-SM evidence templates     | Not started   | Free in-repo, no paid tier — see `docs/sas-sm/`    |
+
+"Skeleton" means the service runs, exposes the documented HTTP
+shape, has tests passing, and has the dependencies it needs for
+forward work — but does not yet do the cryptographically-correct
+RSP protocol work that would let it talk to a real eUICC. The
+README of each service spells out exactly what's implemented vs
+pending. We refuse to mark anything Implemented based on shape
+alone.
 
 Anything you don't see in the table doesn't exist yet. We will not call
 anything "production-ready" until at least one external party runs it in

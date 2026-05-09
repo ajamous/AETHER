@@ -107,6 +107,11 @@ lab-logs: ## Tail logs from the local lab stack.
 	@if [ ! -f $(LAB_FILE) ]; then exit 0; fi
 	$(COMPOSE) -f $(LAB_FILE) logs -f --tail=100
 
+.PHONY: lab-test
+lab-test: ## Run the lab smoke tests against a running stack.
+	$(call require-tool,$(GO),install Go 1.22+)
+	cd test/e2e && $(GO) test -tags=lab ./...
+
 ##@ Documentation
 
 .PHONY: docs-serve

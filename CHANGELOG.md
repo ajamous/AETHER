@@ -9,20 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Repository bootstrap: Apache 2.0 license, README with honest status table,
-  CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, GOVERNANCE, MAINTAINERS, ROADMAP.
-- Makefile with `build`, `test`, `lint`, `lab-up`, `lab-down`, `gen` targets.
-- Go workspace stub (`go.work`).
-- Linter and formatter configs (`.golangci.yml`, `.editorconfig`,
-  `.prettierrc`).
-- GitHub Actions CI workflow (build, test, lint, DCO check).
-- CodeQL security scanning workflow.
-- Release workflow stub.
+Foundation:
+- Repository bootstrap: Apache 2.0 license, README with honest status
+  table, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, GOVERNANCE,
+  MAINTAINERS, ROADMAP.
+- Makefile with build/test/lint/lab-up/lab-down/lab-test/gen targets,
+  per-module iteration, graceful tool-missing diagnostics.
+- Go workspace (`go.work`).
+- Linter and formatter configs.
+- GitHub Actions: ci, release, codeql.
 - Issue and pull request templates.
-- Documentation skeleton (MkDocs Material site).
-- First five ADRs covering monorepo layout, language choice, HSM
-  abstraction, lab/production cert mode switching, and license selection.
-- ASN.1 toolchain scaffolding under `pkg/asn1/sgp22/` with `make gen`
-  build step.
+- Documentation skeleton (MkDocs Material), ADRs 0001-0005.
+- ASN.1 toolchain scaffolding under `pkg/asn1/sgp22/` with starter
+  PEHeader round-trip test.
+
+Crypto primitives (`pkg/crypto`):
+- ECDSA P-256 sign/verify with SHA-256 (DER signature shape).
+- ECKA over P-256 with X9.63-SHA-256 KDF.
+- X9.63 KDF tested against a NIST CAVP vector.
+- AES-128-GCM BSP wrappers.
+- Brainpool P-256 r1 stubbed pending dependency-vetted curve.
+
+Services (`services/`):
+- `hsm-broker`: PKCS#11 façade. Memory backend implemented, SoftHSM
+  lifecycle wired (ops pending). HTTP+JSON server with RFC 7807
+  errors. Proto contract in `api/v1/hsm.proto`.
+- `certmgr`: cert chain loading and verification, lab and production
+  modes (per ADR 0004), expiry Prometheus metrics, lab-chain
+  generator for tests and the local lab.
+- `smdp-plus`: ES9+ endpoint skeletons at the SGP.22 paths, session
+  state machine, in-memory session store. BPP generation honestly
+  returns 501 until the SAIP codec lands.
+- `profile-builder`: YAML profile template loader with validation,
+  UPP envelope (replaced by SAIP-encoded UPP when the codec lands).
+- `gateway`: single entry point. ES2+ skeletons at the SGP.22 paths,
+  REST proxies to profile-builder and certmgr.
+- `audit`: hash-chained append-only ledger. Append, list, get, verify,
+  with tamper detection.
+
+Lab and tests:
+- Docker Compose at `deployments/docker-compose/lab.yml` brings up
+  Postgres, Redis, NATS, certgen, and all six Aether services with
+  health-gated startup ordering.
+- Lab smoke tests at `test/e2e/`, gated by `-tags=lab`, exercise the
+  gateway, certmgr metrics, audit chain, and ES2+ download-order
+  round trip.
 
 [Unreleased]: https://github.com/ajamous/aether/compare/HEAD...HEAD
