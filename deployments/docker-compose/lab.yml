@@ -177,6 +177,24 @@ services:
     ports:
       - "8448:8448"
 
+  eim:
+    build:
+      context: ../..
+      dockerfile: services/eim/Dockerfile
+    command: ["--listen=:8449"]
+    environment:
+      AETHER_PG_URL: postgres://aether:aether@postgres:5432/aether?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8449/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8449:8449"
+
   gateway:
     build:
       context: ../..
@@ -187,6 +205,7 @@ services:
       - "--smdp-plus=http://smdp-plus:8445"
       - "--certmgr=http://certmgr:8444"
       - "--smds=http://smds:8448"
+      - "--eim=http://eim:8449"
     depends_on:
       profile-builder:
         condition: service_healthy
@@ -197,6 +216,8 @@ services:
       audit:
         condition: service_healthy
       smds:
+        condition: service_healthy
+      eim:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/v1/health || exit 1"]

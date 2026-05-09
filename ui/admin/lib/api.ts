@@ -93,3 +93,15 @@ export type SMDSEvent = {
 };
 export type SMDSEvents = { length: number; events: SMDSEvent[] };
 export const fetchSMDSEvents = () => get<SMDSEvents>(`${GATEWAY}/v1/smds/events`);
+
+// ---- eIM (SGP.32) ----------------------------------------------------------
+
+export type IoTDevice = {
+  eid: string;
+  label?: string;
+  tags?: string[];
+  registered_at: string;
+  last_seen?: string | null;
+};
+export type IoTDevices = { length: number; devices: IoTDevice[] };
+export const fetchIoTDevices = () => get<IoTDevices>(`${GATEWAY}/v1/eim/devices`);

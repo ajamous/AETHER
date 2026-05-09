@@ -27,6 +27,7 @@ func run() error {
 		smdpPlus       = flag.String("smdp-plus", "http://smdp-plus:8443", "smdp-plus base URL")
 		certmgr        = flag.String("certmgr", "http://certmgr:8444", "certmgr base URL")
 		smds           = flag.String("smds", "http://smds:8448", "smds base URL")
+		eim            = flag.String("eim", "http://eim:8449", "eim base URL")
 	)
 	flag.Parse()
 
@@ -36,6 +37,7 @@ func run() error {
 		SMDPPlus:       *smdpPlus,
 		CertMgr:        *certmgr,
 		SMDS:           *smds,
+		EIM:            *eim,
 	})
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -47,6 +49,7 @@ func run() error {
 		slog.String("smdp_plus", *smdpPlus),
 		slog.String("certmgr", *certmgr),
 		slog.String("smds", *smds),
+		slog.String("eim", *eim),
 	)
 	return srv.ListenAndServe(ctx, *listen)
 }

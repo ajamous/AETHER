@@ -31,7 +31,7 @@ The table below is the source of truth.
 | `services/certmgr`            | Implemented   | Cert chain load/verify, lab/prod modes, expiry metrics, lab-chain generator |
 | `services/smdp-plus`          | Partial       | ES9+ endpoints + persistent sessions + signed `ServerSigned1` (§5.7.13) via hsm-broker + verified `EuiccSigned1` (§5.7.5) chain via certmgr trust store; BPP returns 501 until SAIP codec lands |
 | `services/smds`               | Skeleton      | ES11 + ES12 with end-to-end discovery flow, in-memory and Postgres-backed event stores; signing pending |
-| `services/eim`                | Not started   | SGP.32                                             |
+| `services/eim`                | Skeleton      | SGP.32 device registry + per-device command queue, in-memory and Postgres-backed; IPA poll/ack lifecycle tested end to end |
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
 | `services/audit`              | Implemented   | Hash-chained ledger with verify, in-memory and Postgres-backed stores; serializable concurrent appends verified |
 | `services/gateway`            | Skeleton      | ES2+ shapes + REST proxy to upstream services; OIDC/mTLS/rate-limit pending |
