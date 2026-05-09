@@ -12,7 +12,7 @@
       }
     ]
   },
-  "description": "ES2+ gateway detail: 401 Unauthorized rate broken down by reason (no_tls / no_client_cert / chain_invalid). The gateway emits aether_gateway_es2plus_unauthorized_total directly from /metrics.",
+  "description": "Gateway auth-gate rejections across all three production gates: ES2+ mTLS 401s by reason (no_tls / no_client_cert / chain_invalid), per-source rate-limit 429s by path class (es2plus / es9plus), and /v1/* admin OIDC 401s by reason (no_token / expired / wrong_audience / etc.). Each counter is emitted on the gateway's /metrics endpoint and the corresponding alert lives in prometheus-rules.yaml. The dashboard's uid (aether-gateway-es2plus) is preserved from the original ES2+-only dashboard for backward compatibility with existing bookmarks.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -20,6 +20,14 @@
   "links": [],
   "liveNow": false,
   "panels": [
+    {
+      "collapsed": false,
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "id": 100,
+      "title": "ES2+ mTLS — /gsma/rsp2/es2plus/*",
+      "type": "row"
+    },
     {
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "description": "Per-reason 401 rate. AetherES2PlusUnauthorizedSpike fires above 0.5 req/s sustained for 5 minutes.",
@@ -58,7 +66,7 @@
         },
         "overrides": []
       },
-      "gridPos": {"h": 9, "w": 24, "x": 0, "y": 0},
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 1},
       "id": 1,
       "options": {
         "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
@@ -78,44 +86,7 @@
     },
     {
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "description": "Cumulative 401 count by reason since the gateway started. Useful for ratio reasoning across long windows.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {"mode": "thresholds"},
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [{"color": "green", "value": null}]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 9},
-      "id": 2,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
-        "textMode": "value_and_name"
-      },
-      "pluginVersion": "10.4.0",
-      "targets": [
-        {
-          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-          "expr": "sum by (reason) (aether_gateway_es2plus_unauthorized_total)",
-          "legendFormat": "{{reason}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Cumulative 401s by reason",
-      "type": "stat"
-    },
-    {
-      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
-      "description": "Reason breakdown as a share of all 401s over the dashboard time range.",
+      "description": "Reason breakdown as a share of all ES2+ 401s over the dashboard time range.",
       "fieldConfig": {
         "defaults": {
           "color": {"mode": "palette-classic"},
@@ -124,8 +95,8 @@
         },
         "overrides": []
       },
-      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 9},
-      "id": 3,
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 1},
+      "id": 2,
       "options": {
         "displayLabels": ["percent"],
         "legend": {"displayMode": "list", "placement": "right", "showLegend": true, "values": ["value"]},
@@ -142,19 +113,207 @@
           "refId": "A"
         }
       ],
-      "title": "401 reason mix (range)",
+      "title": "ES2+ 401 reason mix (range)",
+      "type": "piechart"
+    },
+    {
+      "collapsed": false,
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+      "id": 101,
+      "title": "Rate limit — /gsma/rsp2/*",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "description": "Per-class 429 rate. AetherGatewayRateLimited fires above 1 req/s sustained for 5 minutes.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "normal"},
+            "thresholdsStyle": {"mode": "line"}
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 16, "x": 0, "y": 10},
+      "id": 3,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "sum by (class) (rate(aether_gateway_ratelimit_rejected_total[5m]))",
+          "legendFormat": "{{class}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Rate-limit 429s by path class (5m rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "description": "Cumulative 429 count by class since the gateway started.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 8, "w": 8, "x": 16, "y": 10},
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "sum by (class) (aether_gateway_ratelimit_rejected_total)",
+          "legendFormat": "{{class}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Cumulative 429s by class",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+      "id": 102,
+      "title": "Admin OIDC — /v1/* (excluding /v1/health, /v1/openapi.yaml, /metrics)",
+      "type": "row"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "description": "Per-reason 401 rate on the admin surface. The 10 reasons are the ones the gateway's OIDC verifier emits: no_token, malformed, unsupported_alg, unknown_kid, bad_signature, wrong_issuer, wrong_audience, expired, not_yet_valid, jwks_fetch_failed.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {"legend": false, "tooltip": false, "viz": false},
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {"type": "linear"},
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {"group": "A", "mode": "normal"},
+            "thresholdsStyle": {"mode": "off"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 16, "x": 0, "y": 19},
+      "id": 5,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true},
+        "tooltip": {"mode": "multi", "sort": "desc"}
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "sum by (reason) (rate(aether_gateway_admin_unauthorized_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Admin 401s by reason (5m rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "description": "Reason breakdown over the dashboard time range. A sustained `wrong_audience` typically means the gateway's --oidc-audience and the UI's AUTH_OIDC_CLIENT_ID disagree; `expired` means a session outlived its IdP-issued lifetime; `unknown_kid` usually means the IdP rotated keys faster than the JWKS cache TTL.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {"hideFrom": {"legend": false, "tooltip": false, "viz": false}},
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {"h": 9, "w": 8, "x": 16, "y": 19},
+      "id": 6,
+      "options": {
+        "displayLabels": ["percent"],
+        "legend": {"displayMode": "list", "placement": "right", "showLegend": true, "values": ["value"]},
+        "pieType": "donut",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "pluginVersion": "10.4.0",
+      "targets": [
+        {
+          "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+          "expr": "sum by (reason) (increase(aether_gateway_admin_unauthorized_total[$__range]))",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Admin 401 reason mix (range)",
       "type": "piechart"
     }
   ],
   "refresh": "30s",
   "schemaVersion": 39,
-  "tags": ["aether", "gateway", "es2plus"],
+  "tags": ["aether", "gateway", "auth"],
   "templating": {"list": []},
   "time": {"from": "now-6h", "to": "now"},
   "timepicker": {},
   "timezone": "browser",
-  "title": "Aether — Gateway ES2+",
+  "title": "Aether — Gateway Auth Gates",
   "uid": "aether-gateway-es2plus",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
