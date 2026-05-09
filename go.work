@@ -1,4 +1,4 @@
-go 1.22
+go 1.24.7
 
 // Aether Go workspace.
 //
@@ -7,4 +7,5 @@ go 1.22
 use (
 	./pkg/asn1/sgp22/go
 	./pkg/crypto
+	./services/hsm-broker
 )
