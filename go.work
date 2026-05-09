@@ -9,4 +9,5 @@ use (
 	./pkg/crypto
 	./services/certmgr
 	./services/hsm-broker
+	./services/smdp-plus
 )
