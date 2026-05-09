@@ -1,0 +1,95 @@
+site_name: Aether
+site_description: Open Source Remote SIM Provisioning for the Open Telecom Era
+site_url: https://aether-rsp.org
+repo_url: https://github.com/ajamous/aether
+repo_name: ajamous/aether
+edit_uri: edit/main/docs/
+
+copyright: Apache 2.0 — Copyright the Aether Authors
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Home: index.md
+  - Quick start:
+      - quickstart/index.md
+  - Learn RSP:
+      - learn/index.md
+      - How RSP actually works: learn/how-rsp-works.md
+  - Architecture:
+      - architecture/index.md
+      - ADRs:
+          - architecture/adr/index.md
+          - 'Template': architecture/adr/template.md
+          - '0001 Monorepo': architecture/adr/0001-monorepo.md
+          - '0002 Go for service code': architecture/adr/0002-go-for-services.md
+          - '0003 PKCS#11 HSM abstraction': architecture/adr/0003-pkcs11-abstraction.md
+          - '0004 Lab vs production cert mode': architecture/adr/0004-lab-vs-prod-cert-mode.md
+          - '0005 Apache 2.0 license': architecture/adr/0005-apache-2-license.md
+  - Standards compliance:
+      - standards-compliance/index.md
+      - SGP.22 matrix: standards-compliance/sgp22-matrix.md
+  - Deployment:
+      - deployment/index.md
+  - API:
+      - api/index.md
+  - Operations:
+      - operations/index.md
+  - SAS-SM readiness:
+      - sas-sm/index.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ajamous/aether
