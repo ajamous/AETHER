@@ -1,0 +1,70 @@
+# golangci-lint configuration for Aether.
+#
+# Strict by intent. Code that handles cryptographic material, ASN.1
+# decoding, and protocol state machines benefits from aggressive linting.
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+    - asasalint
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - contextcheck
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - gocritic
+    - gofmt
+    - goimports
+    - gosec
+    - misspell
+    - nakedret
+    - nilerr
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - tparallel
+    - unconvert
+    - unparam
+    - wastedassign
+    - whitespace
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/ajamous/aether
+  gosec:
+    excludes:
+      # G104 (errcheck) is already enforced by errcheck; avoid duplicate noise.
+      - G104
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - "checkPrivateReceivers"
+          - "disableStutteringCheck"
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - unparam
+  max-issues-per-linter: 0
+  max-same-issues: 0
