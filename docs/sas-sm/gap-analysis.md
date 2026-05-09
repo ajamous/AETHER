@@ -94,8 +94,8 @@ versions.
 
 | Requirement | Aether feature | Operator-supplied control | Evidence |
 | --- | --- | --- | --- |
-| Incident response procedure | Incident response runbook with severity matrix (planned, see Status table) | Severity matrix, escalation contacts | Runbook published, last incident's postmortem |
-| Postmortem requirement | Aether docs section accepts public postmortems (planned) | Internal review of every Sev-1/2 | Postmortem document |
+| Incident response procedure | [incident-response.md](incident-response.md) — severity matrix (Sev-1 covers audit-chain breach), audit-chain-break sub-procedure, postmortem template | On-call rota, escalation contacts, IdP wiring | Runbook published, last incident's postmortem |
+| Postmortem requirement | [incident-response.md](incident-response.md) §"Postmortem" prescribes the format; postmortems land under `docs/operations/postmortems/` | Internal review of every Sev-1/2 | Published postmortem (or attestation of "no Sev-1/2 incidents") |
 | Vulnerability disclosure | [SECURITY.md](https://github.com/ajamous/aether/blob/main/SECURITY.md) — 90-day default disclosure window | Designate a security contact | SECURITY.md, mailing list / advisory channel |
 | Patch management | Quarterly minor releases per [GOVERNANCE.md](https://github.com/ajamous/aether/blob/main/GOVERNANCE.md) | Operator-driven patch SLA | Change log, patch-application records |
 
@@ -104,7 +104,7 @@ versions.
 | Requirement | Aether feature | Operator-supplied control | Evidence |
 | --- | --- | --- | --- |
 | Backup and recovery | Postgres-backed state in audit, smds, smdp-plus, eim | Operator-managed backups (RDS snapshots, etc.) | Backup-restore drill record |
-| Disaster recovery plan | Reference topology covers single region; multi-region active-active is Phase 6 | DR plan + tested runbook | DR plan, last drill report |
+| Disaster recovery plan | [disaster-recovery.md](disaster-recovery.md) covers single-AZ failure (transparent), regional outage (cold-start in qualifying secondary region), and database compromise (audit-chain-break sub-procedure). Multi-region active-active still Phase 6 | RTO/RPO sign-off, drill cadence, DNS / traffic-shaping migration plan | DR runbook published, last drill report, /v1/verify output post-restore |
 | RTO / RPO documentation | None — operational | Documented per service | RTO/RPO table reviewed annually |
 
 ## What still has gaps
@@ -113,10 +113,15 @@ The "Operator-supplied control" column above is honest about what
 the platform cannot do for you. The biggest current gaps the
 platform plans to close:
 
-1. **Disaster recovery runbook with multi-region active-active
-   reference deployment** — Phase 6 of the project plan.
+1. **Multi-region active-active reference deployment** — Phase 6
+   of the project plan. The DR runbook covers cold-start to a
+   secondary region today; active-active tightens RPO from
+   24 hours to minutes for the audit chain.
 2. **Bundled Grafana dashboards / Alertmanager rules** for the
    operational observability requirements — coming with the
    observability work, see Phase 0/1 follow-ups.
-3. **Worked evidence package examples** — pending adopters passing
-   audits and contributing back.
+3. **GCP and on-prem reference deployments** — only AWS today
+   (see [reference-aws.md](reference-aws.md)).
+4. **Worked evidence package examples** — pending adopters passing
+   audits and contributing back ([common-findings.md](common-findings.md)
+   describes the patterns; the worked examples close the loop).

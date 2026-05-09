@@ -82,6 +82,41 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+SAS-SM section: four operator runbooks land:
+- `disaster-recovery.md` — three-tier scenario model (single-AZ
+  failure, regional outage, database compromise), starting RTO/RPO
+  table per service, recovery procedures keyed to the WORM-bucket
+  daily timeline anchor pattern from audit-retention.md, drill
+  cadence, evidence checklist. The audit-chain-break path
+  (Sev-1, preserve-evidence-first) crossreferences the incident
+  runbook below.
+- `incident-response.md` — severity matrix (audit chain integrity
+  break is always Sev-1; suspected key exposure is always Sev-1),
+  named roles with the operator/IC-can't-also-be-engineer rule,
+  step-by-step ack/triage/mitigate/recovery flow, mitigation
+  table by symptom, audit-chain-break sub-procedure, postmortem
+  template that lands under `docs/operations/postmortems/`.
+- `common-findings.md` — 18 recurring SAS-SM audit findings
+  catalogued by control family (key management, audit logging,
+  network and access, personnel, crypto, ops). Each entry pairs
+  the platform default that pre-empts the finding with the
+  operator gotcha that could still catch you out. This is the
+  high organic-marketing surface the philosophy doc identifies.
+- `recertification-checklist.md` — 60-days-out / 30-days-out /
+  audit-week / after-the-audit checklist, organised in the order
+  the auditor will read your evidence pack.
+
+mkdocs.yml extended with the new pages. README Status table
+updated to reflect the four new docs landed and what's still
+pending (GCP and on-prem reference deployments, plus the
+adopter-contributed worked-evidence examples). The SAS-SM
+gap analysis Incident Management and Business Continuity rows
+moved from "(planned, see Status table)" to direct links at the
+new runbooks, and the bottom-of-file gap list updated to no
+longer claim DR is unsolved (cold-start to qualifying secondary
+region is now documented; multi-region active-active is the
+remaining Phase-6 platform follow-up).
+
 Admin UI OIDC sign-in:
 - Added Auth.js v5 (`next-auth@5.0.0-beta.31`) to `ui/admin`. Two
   modes:

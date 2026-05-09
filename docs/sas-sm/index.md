@@ -25,9 +25,10 @@ for the binding statement.
 | [Reference deployment topology — AWS GSMA-certified regions](reference-aws.md) | Implemented   |
 | Reference deployment topology — GCP                                    | Not started   |
 | Reference deployment topology — on-prem (Thales / Utimaco)            | Not started   |
-| Common audit findings and how Aether's defaults pre-empt them         | Not started   |
-| Annual recertification checklist                                       | Not started   |
-| Incident response runbook with severity matrix                         | Not started   |
+| [Common audit findings and how Aether's defaults pre-empt them](common-findings.md) | Implemented   |
+| [Annual recertification checklist](recertification-checklist.md)       | Implemented   |
+| [Disaster recovery runbook](disaster-recovery.md)                      | Implemented   |
+| [Incident response runbook with severity matrix](incident-response.md) | Implemented   |
 | Worked examples of evidence packages from real audits                  | Not started — contributed by adopters who pass |
 
 ## How to use this section
