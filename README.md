@@ -40,7 +40,7 @@ The table below is the source of truth.
 | Conformance harness (SGP.23)  | Implemented   | `make conformance` runs 40 cases across 8 SGP.23 families; coverage matrix in `tools/conformance/coverage/sgp23.md`; hardware-in-the-loop tests honestly out of scope |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
 | Helm chart                    | Implemented   | Lab + production install paths; lab cert-init initContainer auto-mints SGP.26-style chain on every pod start |
-| Terraform modules             | Not started   |                                                    |
+| Terraform modules             | Implemented   | AWS reference deployment under `deployments/terraform/aws/` (VPC + EKS + RDS Multi-AZ + CloudHSM + WORM S3); IRSA trust-policy attachment is a documented manual post-deploy step; GCP + Azure not yet started |
 | Observability bundle          | Implemented   | 11 Prometheus alert rules (cert expiry, audit chain integrity, service health, HSM ready + p99 latency, ES2+ 401 spike per reason, Postgres) + ServiceMonitor manifests under `deployments/observability/`. Grafana dashboards still pending |
 | SAS-SM evidence templates     | Implemented   | Gap analysis, key ceremony, RBAC, audit retention, AWS + GCP + on-prem reference deployments, DR runbook, incident response, common audit findings, recertification checklist — all in `docs/sas-sm/` (free, no paid tier) |
 

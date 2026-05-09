@@ -213,6 +213,26 @@ jobs:
       - name: lint rules
         run: promtool check rules deployments/observability/prometheus/prometheus-rules.yaml
 
+  terraform-validate:
+    name: terraform fmt + validate (aws)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.10.3
+          terraform_wrapper: false
+      - name: terraform fmt
+        run: terraform -chdir=deployments/terraform/aws fmt -recursive -check
+      - name: terraform init (root)
+        run: terraform -chdir=deployments/terraform/aws init -backend=false
+      - name: terraform validate (root)
+        run: terraform -chdir=deployments/terraform/aws validate
+      - name: terraform init (examples/full)
+        run: terraform -chdir=deployments/terraform/aws/examples/full init -backend=false
+      - name: terraform validate (examples/full)
+        run: terraform -chdir=deployments/terraform/aws/examples/full validate
+
   ui:
     name: ui build
     runs-on: ubuntu-latest
