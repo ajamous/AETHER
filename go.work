@@ -7,7 +7,10 @@ go 1.24.7
 use (
 	./pkg/asn1/sgp22/go
 	./pkg/crypto
+	./services/audit
 	./services/certmgr
+	./services/gateway
 	./services/hsm-broker
+	./services/profile-builder
 	./services/smdp-plus
 )

@@ -1,0 +1,21 @@
+name: lab-mvno
+description: Reference profile for the local Aether lab.
+version: "1.0"
+
+network:
+  mcc: "001"
+  mnc: "01"
+  plmn_name: Aether Lab Network
+  hplmn_act: GSM
+
+naa:
+  apps:
+    - USIM
+
+ota:
+  # Base64-encoded byte values (KIC/KID per ETSI TS 102.225, SPI per same).
+  # These are *placeholder* values for the local lab. Replace before
+  # talking to any real network.
+  kic: AAECAwQFBgcICQoLDA0ODw==
+  kid: EBESExQVFhcYGRobHB0eHw==
+  spi: AAA=
