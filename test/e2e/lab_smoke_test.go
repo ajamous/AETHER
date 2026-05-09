@@ -98,6 +98,62 @@ func TestLab_AuditChainAppendAndVerify(t *testing.T) {
 	}
 }
 
+func TestLab_SMDSDiscoveryFlow(t *testing.T) {
+	smds := os.Getenv("AETHER_SMDS")
+	if smds == "" {
+		smds = "http://localhost:8448"
+	}
+	smds = strings.TrimRight(smds, "/")
+
+	// Register an event as if we were the SM-DP+.
+	eid := "89049032123451234512345678901234"
+	reg := []byte(`{"eid":"` + eid + `","rsp_server_address":"smdp.example","event_id":"e2e-test"}`)
+	resp, err := http.Post(smds+"/gsma/rsp2/es12/registerEvent", "application/json", bytes.NewReader(reg))
+	if err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("register: %d", resp.StatusCode)
+	}
+
+	// Auth as the LPA.
+	auth := []byte(`{"eid":"` + eid + `","euicc_challenge":"Y2g="}`)
+	resp, err = http.Post(smds+"/gsma/rsp2/es11/authenticateClient", "application/json", bytes.NewReader(auth))
+	if err != nil {
+		t.Fatalf("auth: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("auth: %d", resp.StatusCode)
+	}
+	var ar struct {
+		TransactionID string `json:"transaction_id"`
+	}
+	json.NewDecoder(resp.Body).Decode(&ar)
+
+	// Poll for events.
+	get := []byte(`{"transaction_id":"` + ar.TransactionID + `"}`)
+	resp, err = http.Post(smds+"/gsma/rsp2/es11/getEvents", "application/json", bytes.NewReader(get))
+	if err != nil {
+		t.Fatalf("getEvents: %v", err)
+	}
+	defer resp.Body.Close()
+	var gr struct {
+		Events []struct {
+			RSPServerAddress string `json:"rsp_server_address"`
+		} `json:"events"`
+	}
+	json.NewDecoder(resp.Body).Decode(&gr)
+	if len(gr.Events) == 0 || gr.Events[0].RSPServerAddress != "smdp.example" {
+		t.Fatalf("expected discovery to find smdp.example, got %+v", gr.Events)
+	}
+
+	// Cleanup.
+	http.Post(smds+"/gsma/rsp2/es12/deleteEvent", "application/json",
+		bytes.NewReader([]byte(`{"eid":"`+eid+`","event_id":"e2e-test"}`)))
+}
+
 func TestLab_DownloadOrderRoundTrip(t *testing.T) {
 	req := []byte(`{"iccid":"8900000000000000001","profile_type":"lab-mvno"}`)
 	resp, err := http.Post(gatewayURL()+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(req))

@@ -13,5 +13,6 @@ use (
 	./services/hsm-broker
 	./services/profile-builder
 	./services/smdp-plus
+	./services/smds
 	./test/e2e
 )

@@ -46,6 +46,11 @@ Services (`services/`):
   REST proxies to profile-builder and certmgr.
 - `audit`: hash-chained append-only ledger. Append, list, get, verify,
   with tamper detection.
+- `smds`: Subscription Manager — Discovery Service (Phase 3).
+  ES12 RegisterEvent / DeleteEvent for SM-DP+, ES11 AuthenticateClient
+  / GetEvents for the LPA. In-memory event store with idempotent
+  registration. Full discovery handshake exercised end-to-end in
+  tests. Gateway proxies the admin /v1/events surface for the UI.
 
 Admin UI (`ui/admin/`):
 - Next.js 15 (App Router), React 18, Tailwind CSS, TypeScript strict.

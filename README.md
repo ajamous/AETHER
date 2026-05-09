@@ -30,7 +30,7 @@ The table below is the source of truth.
 | `services/hsm-broker`         | Skeleton      | Memory backend implemented + tested; SoftHSM lifecycle wired, ops pending |
 | `services/certmgr`            | Implemented   | Cert chain load/verify, lab/prod modes, expiry metrics, lab-chain generator |
 | `services/smdp-plus`          | Skeleton      | ES9+ endpoint shapes + state machine; BPP returns 501 until SAIP codec lands |
-| `services/smds`               | Not started   | SGP.22 ES11/ES12                                   |
+| `services/smds`               | Skeleton      | ES11 + ES12 with end-to-end discovery flow tested in-memory; signing pending |
 | `services/eim`                | Not started   | SGP.32                                             |
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
 | `services/audit`              | Implemented   | Hash-chained ledger with verify; in-memory store (Postgres backend pending) |

@@ -150,6 +150,19 @@ services:
     ports:
       - "8447:8447"
 
+  smds:
+    build:
+      context: ../..
+      dockerfile: services/smds/Dockerfile
+    command: ["--listen=:8448"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8448/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8448:8448"
+
   gateway:
     build:
       context: ../..
@@ -159,6 +172,7 @@ services:
       - "--profile-builder=http://profile-builder:8446"
       - "--smdp-plus=http://smdp-plus:8445"
       - "--certmgr=http://certmgr:8444"
+      - "--smds=http://smds:8448"
     depends_on:
       profile-builder:
         condition: service_healthy
@@ -167,6 +181,8 @@ services:
       certmgr:
         condition: service_healthy
       audit:
+        condition: service_healthy
+      smds:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/v1/health || exit 1"]

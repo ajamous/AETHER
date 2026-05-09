@@ -22,6 +22,7 @@ type Server struct {
 	profileBuilder string
 	smdpPlus       string
 	certmgr        string
+	smds           string
 	httpClient     *http.Client
 }
 
@@ -29,6 +30,7 @@ type Config struct {
 	ProfileBuilder string
 	SMDPPlus       string
 	CertMgr        string
+	SMDS           string
 }
 
 func New(cfg Config) *Server {
@@ -36,6 +38,7 @@ func New(cfg Config) *Server {
 		profileBuilder: strings.TrimRight(cfg.ProfileBuilder, "/"),
 		smdpPlus:       strings.TrimRight(cfg.SMDPPlus, "/"),
 		certmgr:        strings.TrimRight(cfg.CertMgr, "/"),
+		smds:           strings.TrimRight(cfg.SMDS, "/"),
 		httpClient:     &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -56,6 +59,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/templates/{name}", s.proxyPath("profile-builder", "/v1/templates"))
 	mux.HandleFunc("GET /v1/certs", s.proxy("certmgr", "/v1/certs"))
 	mux.HandleFunc("GET /v1/trust-store", s.proxy("certmgr", "/v1/trust-store"))
+	mux.HandleFunc("GET /v1/smds/events", s.proxy("smds", "/v1/events"))
 
 	return mux
 }
@@ -196,6 +200,8 @@ func (s *Server) upstream(name string) string {
 		return s.smdpPlus
 	case "certmgr":
 		return s.certmgr
+	case "smds":
+		return s.smds
 	}
 	return ""
 }

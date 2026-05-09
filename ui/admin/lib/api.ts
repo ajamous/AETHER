@@ -81,3 +81,15 @@ export type VerifyResult = {
   reason?: string;
 };
 export const fetchAuditVerify = () => get<VerifyResult>(`${AUDIT}/v1/verify`);
+
+// ---- SM-DS -----------------------------------------------------------------
+
+export type SMDSEvent = {
+  eid: string;
+  event_id: string;
+  rsp_server_address: string;
+  forwarding: boolean;
+  registered_at: string;
+};
+export type SMDSEvents = { length: number; events: SMDSEvent[] };
+export const fetchSMDSEvents = () => get<SMDSEvents>(`${GATEWAY}/v1/smds/events`);

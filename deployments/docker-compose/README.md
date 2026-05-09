@@ -21,6 +21,7 @@ make lab-down    # tear down + remove volumes
 | smdp-plus        | 8445  | SM-DP+ ES9+ endpoints                                |
 | profile-builder  | 8446  | Profile templates                                    |
 | audit            | 8447  | Hash-chained audit log                               |
+| smds             | 8448  | Discovery service (ES11/ES12)                        |
 | gateway          | 8080  | ES2+ for BSS, REST for UI; entrypoint                |
 | admin-ui         | 3000  | Next.js operator console (read-only, no auth)        |
 

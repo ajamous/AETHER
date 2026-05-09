@@ -5,6 +5,7 @@ const NAV = [
   { href: '/', label: 'Dashboard' },
   { href: '/templates', label: 'Profile templates' },
   { href: '/certs', label: 'Certificates' },
+  { href: '/smds', label: 'Discovery (SM-DS)' },
   { href: '/audit', label: 'Audit log' },
   { href: '/about', label: 'About' },
 ];

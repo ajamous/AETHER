@@ -18,7 +18,7 @@ Status legend:
 | §3.2    | Profile enable / disable                       | Planned  | `services/smdp-plus/` (Phase 1) |
 | §3.3    | Profile delete                                 | Planned  | `services/smdp-plus/` |
 | §3.4    | Notifications                                  | Planned  | `services/smdp-plus/` |
-| §3.5    | Discovery service procedures                   | Planned  | `services/smds/` (Phase 3) |
+| §3.5    | Discovery service procedures                   | Skeleton | `services/smds/` (in-memory event store; signing pending) |
 
 ## §4 Architecture
 
@@ -32,11 +32,19 @@ Status legend:
 
 | Section | Function                                       | Status   | Code location |
 | ------- | ---------------------------------------------- | -------- | ------------- |
-| §5.6.1  | ES2+ DownloadOrder                             | Planned  | `services/gateway/` |
-| §5.6.2  | ES2+ ConfirmOrder                              | Planned  | `services/gateway/` |
-| §5.6.3  | ES2+ CancelOrder                               | Planned  | `services/gateway/` |
-| §5.6.4  | ES2+ ReleaseProfile                            | Planned  | `services/gateway/` |
-| §5.6.5  | ES2+ HandleNotification                        | Planned  | `services/gateway/` |
+| §5.4.1  | ES2+ DownloadOrder                             | Skeleton | `services/gateway/` |
+| §5.4.2  | ES2+ ConfirmOrder                              | Skeleton | `services/gateway/` |
+| §5.4.3  | ES2+ CancelOrder                               | Skeleton | `services/gateway/` |
+| §5.4.4  | ES2+ ReleaseProfile                            | Skeleton | `services/gateway/` |
+| §5.4.5  | ES2+ HandleNotification                        | Skeleton | `services/gateway/` |
+| §5.5.1  | ES12 RegisterEvent                             | Implemented (in-memory) | `services/smds/` |
+| §5.5.2  | ES12 DeleteEvent                               | Implemented (in-memory) | `services/smds/` |
+| §5.5.3  | ES11 GetEvents                                 | Implemented (in-memory) | `services/smds/` |
+| §5.5.4  | ES11 AuthenticateClient                        | Skeleton (no signing)   | `services/smds/` |
+| §5.6.1  | ES9+ InitiateAuthentication                    | Skeleton | `services/smdp-plus/` |
+| §5.6.2  | ES9+ AuthenticateClient                        | Skeleton | `services/smdp-plus/` |
+| §5.6.3  | ES9+ GetBoundProfilePackage                    | NotImplemented (501) | `services/smdp-plus/` (BPP pending SAIP codec) |
+| §5.6.5  | ES9+ HandleNotification                        | Skeleton | `services/smdp-plus/` |
 | §5.7.5  | ES9+ AuthenticateClient                        | Planned  | `services/smdp-plus/` |
 | §5.7.6  | ES9+ GetBoundProfilePackage                    | Planned  | `services/smdp-plus/` |
 | §5.7.7  | ES9+ HandleNotification                        | Planned  | `services/smdp-plus/` |
