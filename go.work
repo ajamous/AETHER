@@ -29,4 +29,5 @@ use (
 	./services/smdp-plus
 	./services/smds
 	./test/e2e
+	./tools/conformance/runner
 )

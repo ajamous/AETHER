@@ -188,6 +188,18 @@ jobs:
             --set observability.prometheusOperator.enabled=true \
             > /tmp/prod.yaml
 
+  conformance:
+    name: SGP.23 conformance suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: run conformance suite
+        run: go run ./tools/conformance/runner
+
   prometheus-rules:
     name: prometheus rules lint
     runs-on: ubuntu-latest

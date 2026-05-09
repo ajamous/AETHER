@@ -3,6 +3,13 @@
 Tracks Aether's implementation of GSMA SGP.22 (Consumer RSP Technical
 Specification). This is the truth of what we cover and what we don't.
 
+For the SGP.23 (Test Specification) side of the same story —
+which Aether tests cover which SGP.23 case family — see
+[tools/conformance/coverage/sgp23.md](https://github.com/ajamous/aether/tree/main/tools/conformance/coverage/sgp23.md).
+The two matrices are complementary: this one is "what
+protocol does Aether implement"; the conformance one is
+"how is each protocol piece tested."
+
 Status legend:
 
 - **Implemented** — code exists, has tests, is exercised in CI

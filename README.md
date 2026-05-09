@@ -37,7 +37,7 @@ The table below is the source of truth.
 | `services/gateway`            | Partial       | ES2+ shapes + REST proxy + HTTPS + verified-client-cert mTLS on /gsma/rsp2/es2plus/* (path-scoped); OIDC and rate-limit pending |
 | `ui/admin`                    | Partial       | Next.js 15 read-only console with Auth.js OIDC sign-in (lab bypass with banner when unconfigured); dashboard, templates, certs, SM-DS, eIM, audit |
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
-| Conformance harness (SGP.23)  | Not started   |                                                    |
+| Conformance harness (SGP.23)  | Implemented   | `make conformance` runs 40 cases across 8 SGP.23 families; coverage matrix in `tools/conformance/coverage/sgp23.md`; hardware-in-the-loop tests honestly out of scope |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
 | Helm chart                    | Implemented   | Lab + production install paths; lab cert-init initContainer auto-mints SGP.26-style chain on every pod start |
 | Terraform modules             | Not started   |                                                    |
