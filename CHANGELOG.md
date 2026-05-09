@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Grafana dashboard refresh
+(`deployments/observability/grafana/dashboards/`):
+- Closes a gap created by recent counter-emitting PRs that didn't
+  update the dashboards. The `aether_gateway_ratelimit_rejected_total`
+  (rate-limit PR) and `aether_gateway_admin_unauthorized_total`
+  (OIDC PR) metrics had no panels; the audit chain had no
+  dedicated dashboard at all.
+- `aether-gateway-es2plus.json` is broadened to cover all three
+  gateway auth gates: ES2+ mTLS 401s, rate-limit 429s by class,
+  and admin OIDC 401s by reason. Title becomes "Aether — Gateway
+  Auth Gates"; file name + uid stay `aether-gateway-es2plus` for
+  backward compatibility with existing bookmarks and
+  kube-prometheus-stack ConfigMap names. 9 panels (was 3),
+  organised under three collapsible rows.
+- New `aether-audit.json` dashboard surfaces the audit chain's
+  integrity (`aether_audit_chain_ok`), length, append rate, and
+  the scrape-up signal — so on-call can tell `silent` apart from
+  `green`. Includes a step-after timeseries of chain integrity
+  so any drop to 0 is unmissable. 6 panels.
+- Both new dashboards' PromQL targets reference only metrics
+  that exist in the codebase (verified by grep across
+  services/* and pkg/*); same honest-status posture as the
+  existing dashboards.
+- Observability bundle README updated: 3 → 4 dashboards.
+- Top-level Status row "Observability bundle" updated: now
+  lists "four Grafana dashboards (overview, HSM, gateway auth
+  gates, audit chain)".
+- CI's `grafana-dashboards` job (jq-parse + uid/title/panel
+  count check) runs unchanged; both new dashboards pass.
+
 Auditor CLI for signed anchors (`tools/aether-verify-anchor/`):
 - Closes the loop opened by the previous PR. Signed timeline
   anchors are only useful if auditors can verify them offline;

@@ -1,14 +1,15 @@
 # Aether Grafana dashboards
 
-Three dashboards backed by metrics that Aether services already
+Four dashboards backed by metrics that Aether services already
 emit on `/metrics` (plus `kube-state-metrics` and
 `postgres-exporter` for the cluster-level views).
 
-| Dashboard                                   | UID                       | Description                                           |
-| ------------------------------------------- | ------------------------- | ----------------------------------------------------- |
-| `aether-overview.json`                      | `aether-overview`         | Top-level health: audit chain, services, HSM, certs   |
-| `aether-hsm.json`                           | `aether-hsm`              | HSM broker latency percentiles, throughput, heatmap   |
-| `aether-gateway-es2plus.json`               | `aether-gateway-es2plus`  | ES2+ 401 spike breakdown by reason                    |
+| Dashboard                                   | UID                       | Description                                                                         |
+| ------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
+| `aether-overview.json`                      | `aether-overview`         | Top-level health: audit chain, services, HSM, certs                                 |
+| `aether-hsm.json`                           | `aether-hsm`              | HSM broker latency percentiles, throughput, heatmap                                 |
+| `aether-gateway-es2plus.json`               | `aether-gateway-es2plus`  | All three gateway auth gates: ES2+ mTLS 401s, rate-limit 429s, admin OIDC 401s      |
+| `aether-audit.json`                         | `aether-audit`            | Audit chain integrity, length over time, append rate, scrape-up signal              |
 
 Every panel queries metrics that the alert rules in
 [`../prometheus/prometheus-rules.yaml`](../prometheus/prometheus-rules.yaml)
