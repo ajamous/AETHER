@@ -185,7 +185,21 @@ jobs:
             --set hsmBroker.pkcs11.pinSecret.name=hsm-pin \
             --set ingress.enabled=true \
             --set ingress.host=aether.example.com \
+            --set observability.prometheusOperator.enabled=true \
             > /tmp/prod.yaml
+
+  prometheus-rules:
+    name: prometheus rules lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: install promtool
+        run: |
+          curl -fsSL https://github.com/prometheus/prometheus/releases/download/v2.54.1/prometheus-2.54.1.linux-amd64.tar.gz \
+            | tar -xz -C /tmp
+          sudo mv /tmp/prometheus-2.54.1.linux-amd64/promtool /usr/local/bin/
+      - name: lint rules
+        run: promtool check rules deployments/observability/prometheus/prometheus-rules.yaml
 
   ui:
     name: ui build

@@ -82,6 +82,37 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Observability bundle (`deployments/observability/`):
+- 9 Prometheus alert rules covering audit chain integrity (Sev-1
+  on aether_audit_chain_ok=0), audit-metrics scrape failure,
+  cert expiry at three thresholds (sev-3 < 30d / sev-2 < 7d /
+  sev-1 expired), service availability + crash-loop, HSM broker
+  unhealthy, and Postgres connection exhaustion.
+- Two flavours: vanilla Prometheus rules YAML
+  (prometheus/prometheus-rules.yaml) for adopters running plain
+  Prometheus, plus PrometheusRule + ServiceMonitor CRDs
+  (prometheus-operator/) for kube-prometheus-stack adopters.
+- Both forms cross-reference docs/sas-sm/incident-response.md
+  via runbook_url annotations on the audit-chain-broken alert.
+- Two metrics added to make alerts fire from native data:
+    services/hsm-broker /metrics — emits aether_hsm_broker_ready
+    services/audit /metrics    — emits aether_audit_chain_ok
+                                 and aether_audit_chain_length
+  Both are tiny hand-rolled exposition; a fuller instrumentation
+  pass (Sign-latency histogram, gateway 401 counter) is the
+  named follow-up that closes the last two pending alerts.
+- Helm chart: new observability.prometheusOperator.enabled
+  value (default false). When true, the chart renders the
+  PrometheusRule + ServiceMonitor CRDs in-release, scoped to
+  the release label kube-prometheus-stack by default.
+- CI: new prometheus-rules job runs `promtool check rules` on
+  every PR.
+- Status table: new "Observability bundle" row marks Partial.
+  SAS-SM gap analysis "Key expiry monitoring and alerting" row
+  upgraded to point at the shipped alert rules. reference-aws.md
+  Observability section rewritten to enumerate the 9 implemented
+  alerts and the 2 pending ones honestly.
+
 SAS-SM section: four operator runbooks land:
 - `disaster-recovery.md` — three-tier scenario model (single-AZ
   failure, regional outage, database compromise), starting RTO/RPO

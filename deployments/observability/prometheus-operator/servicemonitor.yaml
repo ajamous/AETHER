@@ -1,0 +1,43 @@
+# Prometheus Operator ServiceMonitor for Aether services.
+#
+# Targets the per-service Kubernetes Service the Helm chart
+# creates and scrapes /metrics on each backend port. The Helm
+# chart's pod-level prometheus.io/* annotations don't help when
+# the cluster runs Prometheus Operator instead of the legacy
+# annotation-based discovery; this ServiceMonitor closes that gap.
+#
+# Apply alongside prometheusrule.yaml when your cluster runs
+# kube-prometheus-stack or the Prometheus Operator.
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aether
+  labels:
+    app.kubernetes.io/name: aether
+    app.kubernetes.io/component: observability
+    release: kube-prometheus-stack
+spec:
+  # Match every Aether-component Service in the namespace. Each
+  # service exposes a single port named `http`; the per-service
+  # /metrics endpoints below get scraped on that port.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aether
+  namespaceSelector:
+    matchNames:
+      - aether
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings:
+        # Promote the component label from the Service so alerts
+        # can route on aether_component=...
+        - sourceLabels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+          targetLabel: aether_component
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace

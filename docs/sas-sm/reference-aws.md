@@ -155,13 +155,26 @@ metrics:
 
 - Prometheus scrapes the chart's `/metrics` endpoints (the chart
   emits the right annotations).
-- Grafana dashboards (planned to ship under
-  `deployments/observability/`).
-- Alertmanager rules at minimum:
-  - `aether_cert_expiry_days{...} < 30` — page on-call
-  - `audit /v1/verify ok=false` — page on-call (chain broken)
-  - Service health probe failure for any aether-* deployment
-  - HSM broker latency > 250ms p99
+- Alert rules and Prometheus Operator manifests ship under
+  [deployments/observability/](https://github.com/ajamous/aether/tree/main/deployments/observability).
+  Two flavours: vanilla Prometheus rules YAML for adopters
+  running plain Prometheus, plus `PrometheusRule` and
+  `ServiceMonitor` CRDs for kube-prometheus-stack adopters.
+  When deploying via Helm, set
+  `observability.prometheusOperator.enabled: true` to render
+  the CRDs in-cluster.
+- Implemented alerts (9): audit chain integrity broken (Sev-1),
+  audit metrics scrape failing (Sev-2), cert expiring < 30 days
+  (Sev-3) / < 7 days (Sev-2) / expired (Sev-1), service down,
+  service crash-looping, HSM broker unhealthy (Sev-1), Postgres
+  connections exhausted.
+- Pending instrumentation: HSM Sign p99 latency and gateway
+  ES2+ 401 spike — both rules listed in
+  [deployments/observability/README.md](https://github.com/ajamous/aether/tree/main/deployments/observability)
+  §"Pending instrumentation" with the small follow-up patches
+  needed in services/hsm-broker and services/gateway.
+- Grafana dashboard JSON: planned, dependent on having a
+  Grafana instance to validate against.
 - CloudWatch Logs Insights queries pre-baked for the audit
   evidence pack:
   - "All Sign calls in the last 30 days, by key id"

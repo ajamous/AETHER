@@ -41,6 +41,7 @@ The table below is the source of truth.
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
 | Helm chart                    | Implemented   | Lab + production install paths render and lint; cert-init Job for lab pending |
 | Terraform modules             | Not started   |                                                    |
+| Observability bundle          | Partial       | 9 Prometheus alert rules (cert expiry, audit chain integrity, service health, HSM, Postgres) + ServiceMonitor manifests under `deployments/observability/`; Grafana dashboards and 2 latency/401 metrics still pending |
 | SAS-SM evidence templates     | Partial       | Gap analysis, key ceremony, RBAC, audit retention, AWS reference, DR runbook, incident response, common audit findings, recertification checklist — all in `docs/sas-sm/` (free, no paid tier). GCP / on-prem reference deployments still pending |
 
 "Skeleton" means the service runs, exposes the documented HTTP

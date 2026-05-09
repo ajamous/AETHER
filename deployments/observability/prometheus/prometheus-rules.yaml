@@ -1,0 +1,185 @@
+# Aether Prometheus alert rules.
+#
+# Mounted into Prometheus via `rule_files:` in prometheus.yaml, or
+# rendered as a PrometheusRule CRD (see ../prometheus-operator/).
+# Adopters wiring their own monitoring point Prometheus at the
+# Aether services (the Helm chart emits `prometheus.io/scrape`
+# annotations on every pod) and load this rules file.
+#
+# Severity convention matches the SAS-SM incident-response runbook
+# (docs/sas-sm/incident-response.md):
+#   sev-1: customer impact, audit chain integrity, or HSM unreachable
+#   sev-2: degraded service, certs expiring within 7 days
+#   sev-3: certs expiring within 30 days, transient errors
+#
+# Validation: `promtool check rules prometheus-rules.yaml`.
+
+groups:
+  - name: aether-audit-chain
+    interval: 60s
+    rules:
+      - alert: AetherAuditChainBroken
+        # The audit chain integrity check MUST pass — a break is
+        # a SAS-SM-relevant event and is always Sev-1, even with
+        # no customer impact. The audit service emits
+        # aether_audit_chain_ok directly from /metrics, so this
+        # alert needs no blackbox-exporter setup.
+        expr: aether_audit_chain_ok == 0
+        for: 0m
+        labels:
+          severity: sev-1
+          aether_component: audit
+        annotations:
+          summary: Audit hash chain integrity check failed
+          description: |
+            services/audit reports aether_audit_chain_ok=0 — the
+            chain has been tampered with, was rebuilt incorrectly,
+            or has gone out of order. This is always Sev-1; see
+            docs/sas-sm/incident-response.md §"Audit-chain-break
+            sub-procedure". Stop writes immediately, snapshot
+            Postgres, do not delete pods.
+          runbook_url: https://github.com/ajamous/aether/blob/main/docs/sas-sm/incident-response.md#audit-chain-break-sub-procedure-always-sev-1
+
+      - alert: AetherAuditMetricsScrapeFailing
+        # Scrape itself is failing — we don't know if the chain
+        # is OK. Surfaced separately so the on-call doesn't assume
+        # silence = success.
+        expr: up{job="aether",aether_component="audit"} == 0
+        for: 5m
+        labels:
+          severity: sev-2
+          aether_component: audit
+        annotations:
+          summary: Audit /metrics scrape is failing
+          description: |
+            Prometheus can't reach services/audit /metrics. Either
+            the audit service is down or the scrape is misconfigured.
+            Investigate before assuming chain is healthy — silence
+            here is not a green light.
+
+  - name: aether-certs
+    interval: 300s
+    rules:
+      - alert: AetherCertExpiringSoon
+        expr: aether_cert_expiry_days < 30
+        for: 30m
+        labels:
+          severity: sev-3
+          aether_component: certmgr
+        annotations:
+          summary: Aether identity cert {{ $labels.name }} expiring in {{ $value }} days
+          description: |
+            One of the SM-DP+ identity certs is approaching expiry.
+            Schedule a key ceremony rotation per
+            docs/sas-sm/key-ceremony.md. Page on-call only if days
+            < 7 (separate alert below).
+
+      - alert: AetherCertExpiringUrgent
+        expr: aether_cert_expiry_days < 7
+        for: 10m
+        labels:
+          severity: sev-2
+          aether_component: certmgr
+        annotations:
+          summary: Aether identity cert {{ $labels.name }} expires in {{ $value }} days
+          description: |
+            Identity cert {{ $labels.name }} is within 7 days of
+            expiry. Rotation ceremony must happen this week. If
+            expiry is < 24h, treat as Sev-2 escalation per
+            docs/sas-sm/incident-response.md §"Standard playbook".
+
+      - alert: AetherCertExpired
+        expr: aether_cert_expiry_days <= 0
+        for: 0m
+        labels:
+          severity: sev-1
+          aether_component: certmgr
+        annotations:
+          summary: Aether identity cert {{ $labels.name }} HAS EXPIRED
+          description: |
+            Cert {{ $labels.name }} expired. ES2+ and ES9+ traffic
+            relying on this identity is rejected. Initiate
+            emergency rotation per the key-ceremony procedure.
+
+  - name: aether-service-health
+    interval: 30s
+    rules:
+      - alert: AetherServiceDown
+        # Any aether-* deployment failing its readiness probe for
+        # > 2 minutes. Sev-1 if it's smdp-plus, gateway, or
+        # hsm-broker (active customer impact); Sev-2 otherwise.
+        # Severity is tagged by component below via expression
+        # joins, but the simple form here flags all and lets the
+        # on-call decide.
+        expr: kube_deployment_status_replicas_unavailable{deployment=~"aether-.+", namespace="aether"} > 0
+        for: 2m
+        labels:
+          severity: sev-2
+          aether_component: '{{ $labels.deployment }}'
+        annotations:
+          summary: Aether deployment {{ $labels.deployment }} has unavailable replicas
+          description: |
+            kube-state-metrics reports unavailable replicas for
+            {{ $labels.deployment }} for 2+ minutes. If this is
+            smdp-plus, gateway, or hsm-broker, customer impact
+            is likely — escalate to Sev-1.
+
+      - alert: AetherServiceCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace="aether"}[10m]) > 0
+        for: 10m
+        labels:
+          severity: sev-2
+          aether_component: '{{ $labels.pod }}'
+        annotations:
+          summary: Pod {{ $labels.pod }} crash-looping
+          description: |
+            Container restarts > 0 over the last 10 minutes for
+            {{ $labels.pod }}. Inspect logs.
+
+  - name: aether-hsm
+    interval: 30s
+    rules:
+      - alert: AetherHSMBrokerUnhealthy
+        # When the broker reports ready=false, signing flows
+        # downstream stop. ServerSigned1 production fails. Sev-1.
+        # The hsm-broker /metrics endpoint emits this gauge as
+        # part of every scrape.
+        expr: aether_hsm_broker_ready == 0
+        for: 1m
+        labels:
+          severity: sev-1
+          aether_component: hsm-broker
+        annotations:
+          summary: HSM broker reports unhealthy
+          description: |
+            The HSM broker's /metrics endpoint reports ready=0 with
+            backend={{ $labels.backend }}. Signing flows downstream
+            (smdp-plus ServerSigned1) are failing. Inspect the
+            configured PKCS#11 backend.
+
+  # Sign-latency histograms and gateway 401 counters are listed
+  # as planned alerts in the README but the underlying metrics
+  # are not yet emitted by the services. Adding them is a focused
+  # follow-up; see deployments/observability/README.md
+  # §"Pending instrumentation".
+
+  - name: aether-postgres
+    interval: 60s
+    rules:
+      - alert: AetherPostgresConnectionsExhausted
+        # Audit / smds / smdp-plus / eim all share the same
+        # Postgres. Connection exhaustion = cascading failure.
+        expr: |
+          sum(pg_stat_activity_count{datname="aether"}) /
+          on() group_left() pg_settings_max_connections > 0.8
+        for: 5m
+        labels:
+          severity: sev-2
+          aether_component: postgres
+        annotations:
+          summary: Aether Postgres > 80% connection utilisation
+          description: |
+            Connection pool is approaching exhaustion. Cascading
+            failures across audit, smds, smdp-plus, eim are likely
+            within minutes. Investigate runaway clients or scale
+            the database.
