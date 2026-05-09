@@ -1,0 +1,3 @@
+# `go build` from this directory drops the binary here. The
+# canonical output lives under bin/ via `make verify-anchor`.
+/aether-verify-anchor

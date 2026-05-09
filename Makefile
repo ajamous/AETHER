@@ -117,6 +117,12 @@ conformance: ## Run the SGP.23 conformance suite.
 	$(call require-tool,$(GO),install Go 1.22+)
 	$(GO) run ./tools/conformance/runner
 
+.PHONY: verify-anchor
+verify-anchor: ## Build the audit-anchor verifier CLI to bin/aether-verify-anchor.
+	$(call require-tool,$(GO),install Go 1.22+)
+	mkdir -p bin
+	cd tools/aether-verify-anchor && $(GO) build -o ../../bin/aether-verify-anchor .
+
 ##@ Documentation
 
 .PHONY: docs-serve

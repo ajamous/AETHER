@@ -347,6 +347,24 @@ var catalogue = []Case{
 		Module: "services/audit", Package: "./internal/server/...",
 		RunPattern: "^TestAudit_Anchor_SignedEndToEnd$",
 	},
+	{
+		Family: "Audit",
+		Title:  "Auditor CLI verifies a freshly-signed anchor against the published pubkey",
+		Module: "tools/aether-verify-anchor", Package: ".",
+		RunPattern: "^TestRun_HappyPath$",
+	},
+	{
+		Family: "Audit",
+		Title:  "Auditor CLI rejects tampered signed_payload, tampered signature, wrong pubkey",
+		Module: "tools/aether-verify-anchor", Package: ".",
+		RunPattern: "^TestRun_(TamperedSignedPayload|TamperedSignature|WrongPublicKey)$",
+	},
+	{
+		Family: "Audit",
+		Title:  "Auditor CLI replay cross-checks: match + length-mismatch + tail-hash-mismatch",
+		Module: "tools/aether-verify-anchor", Package: ".",
+		RunPattern: "^TestRun_Replay(Match|LengthMismatch|TailHashMismatch)$",
+	},
 
 	// -- Cert handling -------------------------------------------
 	{

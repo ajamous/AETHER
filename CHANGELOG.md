@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Auditor CLI for signed anchors (`tools/aether-verify-anchor/`):
+- Closes the loop opened by the previous PR. Signed timeline
+  anchors are only useful if auditors can verify them offline;
+  audit-retention.md described the procedure but provided no
+  tool. This PR ships one.
+- Single-file Go CLI (`tools/aether-verify-anchor/main.go`) that:
+  1. Loads a PEM-encoded ECDSA P-256 public key (PKIX or
+     extracted from a CERTIFICATE).
+  2. Loads a JSON anchor from a path or stdin.
+  3. Cross-checks that the DER `signed_payload` decodes to fields
+     matching the JSON shape (catches bucket-tampering after
+     signing).
+  4. SHA-256-hashes the `signed_payload` and ECDSA-verifies the
+     signature against the public key.
+  5. Optionally cross-checks the anchor's `length` and
+     `tail_hash` against operator-supplied values (e.g. from a
+     fresh Postgres restore).
+- Stdlib-only on purpose: an auditor's verifier should be
+  reproducible from a single Go file with zero third-party
+  dependencies, and re-implementable in Python or any language
+  straight from the SGP.22 §H.5 + asn1.Marshal layout.
+- Exit codes are stable for monitor scripts: `0` OK, `1` bad
+  input, `2` bad signature / DER-vs-JSON mismatch, `3`
+  replay cross-check mismatch.
+- 9 unit tests cover the happy path, missing args, tampered
+  signed_payload, tampered signature, wrong pubkey, replay match,
+  replay length mismatch, replay tail-hash mismatch, unsupported
+  signature_alg, missing signed_payload, malformed pubkey PEM.
+- New `make verify-anchor` target builds
+  `bin/aether-verify-anchor`. Workspace gains the new module.
+- audit-retention.md updated with a worked example: the operator
+  builds the CLI, runs it against the daily anchor + the
+  published pubkey, and optionally pipes a `psql ... encode(hash,
+  'hex')` into `--against-tail-hash` for the step-4 replay check.
+- 3 conformance harness cases added (happy, tampered triplet,
+  replay triplet — using regex run patterns to bundle related
+  tests into single cases). 59 total now (was 56).
+
+Status row updates:
+- `services/audit`: now lists the auditor CLI alongside the
+  `/v1/anchor` endpoint.
+- Conformance harness: 56 → 59 cases.
+
 Audit signed timeline anchors (`services/audit/internal/anchor/`,
 `/v1/anchor`):
 - The audit retention runbook (audit-retention.md) calls for a

@@ -29,5 +29,6 @@ use (
 	./services/smdp-plus
 	./services/smds
 	./test/e2e
+	./tools/aether-verify-anchor
 	./tools/conformance/runner
 )
