@@ -21,7 +21,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
           cache: true
 
       - name: install cosign
@@ -30,14 +30,20 @@ jobs:
       - name: install syft
         uses: anchore/sbom-action/download-syft@v0
 
-      - name: build artifacts
+      - name: build artifacts (per service)
         run: |
-          if find . -name go.mod -not -path './vendor/*' | grep -q .; then
-            go build -trimpath -ldflags="-s -w" -o dist/ ./...
-          else
-            mkdir -p dist
-            echo "no Go modules yet; releasing scaffold only" > dist/README.txt
-          fi
+          set -e
+          mkdir -p dist
+          # Workspace mode: build each service's cmd/* binary into dist/.
+          # Modules without a cmd/ subtree (pkg/* libraries, services
+          # without a binary) are skipped.
+          for d in $(find ./services -name go.mod -not -path './vendor/*' -exec dirname {} \;); do
+            name=$(basename "$d")
+            if [ ! -d "$d/cmd" ]; then continue; fi
+            echo "==> build $name"
+            (cd "$d" && go build -trimpath -ldflags="-s -w" -o "../../dist/$name" ./cmd/...)
+          done
+          ls -la dist/
 
       - name: generate SBOM
         run: |

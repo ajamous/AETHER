@@ -3,6 +3,17 @@ go 1.25.0
 // Aether Go workspace.
 //
 // Service and shared-library modules are added here as they land.
+//
+// The go directive above is the floor — every module's go.mod must be
+// at this version or higher, and the workspace tools (CI runners,
+// CodeQL Action's setup-go step, etc.) must install at least this
+// version. The matching pin in .github/workflows/{ci,codeql,release}.yml
+// is `go-version: '1.25'`. Bumping this directive WITHOUT updating
+// those workflows will break CodeQL extraction (was the cause of
+// the November 2026 fix-codeql-pipeline PR).
+//
+// Why 1.25: pgx/v5 v5.9.2 (used by audit, smds, smdp-plus, eim for
+// their Postgres backends) requires Go 1.25.
 
 use (
 	./pkg/asn1/sgp22/go

@@ -1,5 +1,5 @@
 module github.com/ajamous/aether/services/profile-builder
 
-go 1.24.7
+go 1.22
 
-require gopkg.in/yaml.v3 v3.0.1 // indirect
+require gopkg.in/yaml.v3 v3.0.1

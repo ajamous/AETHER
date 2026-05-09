@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
           cache: true
 
       - name: initialize CodeQL
@@ -34,9 +34,24 @@ jobs:
         with:
           languages: ${{ matrix.language }}
 
-      - name: autobuild
-        uses: github/codeql-action/autobuild@v3
-        continue-on-error: true
+      # Aether is a Go workspace with multiple modules. CodeQL's
+      # built-in autobuild tries to use the runner's default Go
+      # (1.22 historically) and fails on go.work + per-module
+      # go.mod files that require newer toolchains (pgx/v5 needs
+      # 1.25). Build explicitly per module so the trace covers
+      # the whole workspace.
+      - name: build (per module, traced)
+        run: |
+          # Tolerate modules whose only files are behind a build tag
+          # (e.g. test/e2e is gated by `//go:build lab`).
+          for d in $(find . -name go.mod -not -path './vendor/*' -not -path './ui/admin/node_modules/*' -exec dirname {} \;); do
+            echo "==> build $d"
+            out=$(cd "$d" && go build ./... 2>&1)
+            rc=$?
+            if [ $rc -ne 0 ] && ! echo "$out" | grep -q 'matched no packages'; then
+              echo "$out"; exit $rc
+            fi
+          done
 
       - name: analyze
         uses: github/codeql-action/analyze@v3
