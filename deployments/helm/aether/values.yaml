@@ -139,6 +139,22 @@ smds:
       memory: 256Mi
   replicaCount: 1
 
+eim:
+  enabled: true
+  image:
+    repository: aether/eim
+    tag: ""
+  service:
+    port: 8449
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  replicaCount: 1
+
 profileBuilder:
   enabled: true
   image:
@@ -178,6 +194,19 @@ gateway:
     tag: ""
   service:
     port: 8080
+  # TLS for the gateway listener and mTLS for the ES2+ surface.
+  # Lab default is plain HTTP — no client-cert checks. Production
+  # MUST set both .tls.serverSecret and .tls.es2plusClientCASecret.
+  #
+  # tls.serverSecret: name of a Secret with `tls.crt` and `tls.key`
+  #                   keys (the standard Kubernetes TLS Secret type).
+  # tls.es2plusClientCASecret: name of a Secret with a `ca.crt` key
+  #                            holding the PEM bundle of CAs whose
+  #                            client certs the gateway accepts on
+  #                            /gsma/rsp2/es2plus/*.
+  tls:
+    serverSecret: ""
+    es2plusClientCASecret: ""
   resources:
     requests:
       cpu: 100m

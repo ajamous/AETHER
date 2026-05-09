@@ -10,7 +10,7 @@ import (
 )
 
 func TestGateway_Health(t *testing.T) {
-	s := New(Config{ProfileBuilder: "http://pb", SMDPPlus: "http://smdp", CertMgr: "http://cm"})
+	s, _ := New(Config{ProfileBuilder: "http://pb", SMDPPlus: "http://smdp", CertMgr: "http://cm"})
 	srv := httptest.NewServer(s.Routes())
 	defer srv.Close()
 	resp, _ := http.Get(srv.URL + "/v1/health")
@@ -25,7 +25,7 @@ func TestGateway_Health(t *testing.T) {
 }
 
 func TestGateway_DownloadOrder_HappyPath(t *testing.T) {
-	s := New(Config{})
+	s, _ := New(Config{})
 	srv := httptest.NewServer(s.Routes())
 	defer srv.Close()
 	body, _ := json.Marshal(DownloadOrderRequest{ICCID: "8900000000000000001"})
@@ -44,7 +44,7 @@ func TestGateway_DownloadOrder_HappyPath(t *testing.T) {
 }
 
 func TestGateway_DownloadOrder_RejectsEmpty(t *testing.T) {
-	s := New(Config{})
+	s, _ := New(Config{})
 	srv := httptest.NewServer(s.Routes())
 	defer srv.Close()
 	resp, _ := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", strings.NewReader("{}"))
@@ -64,7 +64,7 @@ func TestGateway_ProxyToProfileBuilder(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	s := New(Config{ProfileBuilder: upstream.URL})
+	s, _ := New(Config{ProfileBuilder: upstream.URL})
 	srv := httptest.NewServer(s.Routes())
 	defer srv.Close()
 

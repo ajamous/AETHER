@@ -39,7 +39,7 @@ versions.
 
 | Requirement | Aether feature | Operator-supplied control | Evidence |
 | --- | --- | --- | --- |
-| ES2+ DownloadOrder authenticated | mTLS termination on `services/gateway` (configured) | BSS-side cert ceremony | Gateway mTLS config, BSS client cert chain, audit log entries |
+| ES2+ DownloadOrder authenticated | `services/gateway` enforces verified client cert on `/gsma/rsp2/es2plus/*` against a configured CA bundle (path-scoped: `/v1/*` admin paths unaffected) | BSS-side cert ceremony; trust-store CA management | Gateway TLS + ES2+ CA Secret manifests, BSS client cert chain, audit log entries showing 401/200 by source |
 | Profile package generation in trusted zone | `services/profile-builder` runs in-cluster, no internet egress | Network policy isolating profile-builder | NetworkPolicy YAML, cluster ingress logs |
 | Profile keys (Ki, OPc) never appear in logs | `services/profile-builder` validates inputs but does not log them; structured logging strips byte fields | Log-pipeline policy (no debug-level logs in prod) | Sample log dump showing redaction; logging config |
 | Profile delivery cryptographically bound to target eUICC | `pkg/crypto/bsp` (AES-128-GCM) + ECKA via `pkg/crypto/ecka` and `services/hsm-broker` | None — platform-provided | BPP traces from `services/audit` |
@@ -64,7 +64,7 @@ versions.
 | Requirement | Aether feature | Operator-supplied control | Evidence |
 | --- | --- | --- | --- |
 | TLS for all external interfaces | Gateway terminates HTTPS; smdp-plus accepts mTLS | Operator-supplied certs and ingress | Gateway TLS config, ingress manifests |
-| mTLS for ES2+ inbound | Gateway mTLS support | BSS client cert chain config | Trust-store config for ES2+ clients |
+| mTLS for ES2+ inbound | Gateway listener mTLS with `VerifyClientCertIfGiven` plus per-request middleware that rejects unauthenticated requests on `/gsma/rsp2/es2plus/*` (401) and lets `/v1/*` through unchanged. Verified by integration tests in `services/gateway/internal/server`. | BSS client cert chain provisioning + Secret population | Helm-rendered `aether-tls` and `aether-bss-ca` Secrets, gateway args showing the TLS flags, sample 401 from a request without a client cert |
 | Service-to-service trust | Cluster-internal only by default; service mesh ready | mTLS via mesh (Linkerd, Istio) or NetworkPolicy isolation | Mesh config or NetworkPolicy YAML |
 | Datastore encryption at rest | Postgres supports filesystem encryption; bring your own | Operator picks RDS encryption / disk encryption | Cloud config showing encryption-at-rest enabled |
 | Network segmentation | Helm chart deploys all services in one namespace by default | NetworkPolicy per service tier | NetworkPolicy YAML |
