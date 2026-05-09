@@ -123,8 +123,6 @@ platform plans to close:
    and lint clean with promtool. Dashboard JSON requires a Grafana
    instance to validate, so it's a focused follow-up — alerts
    first, dashboards second.
-3. **GCP and on-prem reference deployments** — only AWS today
-   (see [reference-aws.md](reference-aws.md)).
-4. **Worked evidence package examples** — pending adopters passing
+3. **Worked evidence package examples** — pending adopters passing
    audits and contributing back ([common-findings.md](common-findings.md)
    describes the patterns; the worked examples close the loop).

@@ -82,6 +82,41 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+SAS-SM section: GCP and on-prem reference deployments
+- `docs/sas-sm/reference-gcp.md` — full topology mirror of
+  reference-aws.md but on Google Cloud: GKE (Autopilot
+  recommended) + Cloud SQL Postgres regional HA + Cloud HSM
+  (Marvell LiquidSecurity, FIPS 140-2 L3) + GCS bucket with
+  Bucket Lock Compliance retention. Sample production Helm
+  values pinning Cloud SQL Auth Proxy sidecar, Marvell PKCS#11
+  library path, Secret Manager CSI for the HSM PIN, GCE ALB
+  ingress with mTLS via ServerTlsPolicy. Cost ballpark
+  (Cloud HSM dominates, ~$2k/mo).
+- `docs/sas-sm/reference-onprem.md` — for operators with their
+  own HSM hardware or data-residency constraints. Vendor-
+  agnostic K8s (Rancher / OpenShift / k3s / kubeadm) +
+  Postgres HA via Patroni or pg_auto_failover + Thales Luna
+  SA *or* Utimaco SecurityServer + S3-compatible WORM storage
+  (MinIO Object Lock Compliance, Cloudian, or Scality). The
+  hsm-broker code path is identical to the cloud references —
+  ADR 0003's whole point. CapEx vs OpEx analysis: the
+  cloud references trade ~$2.5k/mo of HSM-as-a-service for
+  $40-60k of one-time HSM CapEx that amortises over 3-5y.
+- `docs/sas-sm/index.md` Status table: both reference
+  deployments move to Implemented. The section now ships nine
+  documents (gap analysis, key ceremony, RBAC, audit retention,
+  three reference deployments, DR runbook, incident response,
+  common audit findings, recertification checklist) — only
+  worked evidence examples (which can only come from adopters
+  who've passed audits) remain "Not started."
+- `docs/sas-sm/gap-analysis.md` "What still has gaps" list
+  updated: GCP / on-prem references dropped, only worked
+  evidence examples and multi-region active-active and
+  Grafana dashboards remain.
+- mkdocs.yml SAS-SM nav extended with both new pages.
+- README Status table: SAS-SM evidence templates moves from
+  Partial to Implemented.
+
 Helm chart lab cert-init:
 - Lab-mode certmgr Deployment now ships with an initContainer
   that runs `certmgr --generate-lab=/certs` on every pod start,
