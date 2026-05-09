@@ -52,12 +52,35 @@ Services (`services/`):
 - `gateway`: single entry point. ES2+ skeletons at the SGP.22 paths,
   REST proxies to profile-builder and certmgr.
 - `audit`: hash-chained append-only ledger. Append, list, get, verify,
-  with tamper detection.
+  with tamper detection. In-memory and Postgres-backed stores both
+  ship; the Postgres path uses serializable transactions with
+  retry on 40001 so concurrent appends keep the chain intact.
+  `payload` is stored as `BYTEA` (not `JSONB`) because the hash is
+  over exact bytes — JSONB normalisation breaks the chain on
+  round-trip. Verified with an 8-writer × 25-append-each concurrent
+  test.
 - `smds`: Subscription Manager — Discovery Service (Phase 3).
   ES12 RegisterEvent / DeleteEvent for SM-DP+, ES11 AuthenticateClient
-  / GetEvents for the LPA. In-memory event store with idempotent
-  registration. Full discovery handshake exercised end-to-end in
-  tests. Gateway proxies the admin /v1/events surface for the UI.
+  / GetEvents for the LPA. In-memory and Postgres-backed event stores
+  with idempotent registration via `(eid, event_id)` primary key and
+  `ON CONFLICT DO UPDATE`. Full discovery handshake exercised
+  end-to-end in tests. Gateway proxies the admin /v1/events surface
+  for the UI.
+
+Persistence (Phase 1 follow-up):
+- `services/smdp-plus` gains a Postgres-backed session store with
+  background TTL eviction. The HTTP server now accepts the `Store`
+  interface; the in-memory store stays the test default.
+- All three persistence backends (audit ledger, SM-DS events,
+  SM-DP+ sessions) share the same opt-in pattern: empty `--pg-url`
+  uses in-memory; setting it (or `AETHER_PG_URL`) flips to Postgres
+  with the schema applied at startup.
+- `deployments/docker-compose/lab.yml` wires the three services to
+  the existing Postgres container so the lab now runs against real
+  persistence by default.
+- New `postgres-integration` job in `.github/workflows/ci.yml`
+  brings up a Postgres service container and runs the integration
+  tests for all three backends on every PR.
 
 Admin UI (`ui/admin/`):
 - Next.js 15 (App Router), React 18, Tailwind CSS, TypeScript strict.

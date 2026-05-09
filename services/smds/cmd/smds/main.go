@@ -22,13 +22,35 @@ func main() {
 }
 
 func run() error {
-	listen := flag.String("listen", ":8448", "HTTP listen address")
+	var (
+		listen = flag.String("listen", ":8448", "HTTP listen address")
+		pgURL  = flag.String("pg-url", "", "PostgreSQL URL; if empty, the in-memory store is used (lab default)")
+	)
 	flag.Parse()
 
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	store := events.NewMemoryStore()
-	srv := server.New(store)
+	if env := os.Getenv("AETHER_PG_URL"); env != "" && *pgURL == "" {
+		*pgURL = env
+	}
 
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	var store events.Store
+	if *pgURL == "" {
+		logger.Warn("smds using in-memory store; events lost on restart")
+		store = events.NewMemoryStore()
+	} else {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		pg, err := events.NewPGStore(ctx, *pgURL)
+		if err != nil {
+			return fmt.Errorf("postgres store: %w", err)
+		}
+		defer pg.Close()
+		store = pg
+		logger.Info("smds using postgres store")
+	}
+
+	srv := server.New(store)
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 

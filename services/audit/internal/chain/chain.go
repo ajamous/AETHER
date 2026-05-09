@@ -32,6 +32,17 @@ type Entry struct {
 	Hash      []byte          `json:"hash"`
 }
 
+// Backend is the contract for any audit ledger storage. The in-memory
+// ledger and the Postgres ledger both implement it; the HTTP server
+// accepts either.
+type Backend interface {
+	Append(payload json.RawMessage) (*Entry, error)
+	Get(seq uint64) (*Entry, error)
+	List(since uint64) []*Entry
+	Len() int
+	Verify() VerifyResult
+}
+
 // Ledger is the in-memory ledger.
 type Ledger struct {
 	mu      sync.RWMutex
@@ -138,12 +149,18 @@ func (l *Ledger) Verify() VerifyResult {
 }
 
 func computeHash(seq uint64, ts time.Time, payload []byte, prev []byte) []byte {
+	// Deterministic across in-memory and Postgres round-trip:
+	// time.Time.MarshalBinary() includes internal state (monotonic
+	// clock, zone struct pointer) that doesn't survive a database
+	// round-trip even when the wall-clock value is identical. Using
+	// Unix nanoseconds gives a stable, lossless representation as
+	// long as we truncate to microseconds at insert time (Postgres
+	// timestamptz precision).
 	h := sha256.New()
-	var seqBuf [8]byte
-	binary.BigEndian.PutUint64(seqBuf[:], seq)
-	h.Write(seqBuf[:])
-	tsBytes, _ := ts.UTC().MarshalBinary()
-	h.Write(tsBytes)
+	var buf [16]byte
+	binary.BigEndian.PutUint64(buf[0:8], seq)
+	binary.BigEndian.PutUint64(buf[8:16], uint64(ts.UTC().UnixNano()))
+	h.Write(buf[:])
 	h.Write(payload)
 	h.Write(prev)
 	return h.Sum(nil)

@@ -111,10 +111,14 @@ services:
       context: ../..
       dockerfile: services/smdp-plus/Dockerfile
     command: ["--listen=:8445", "--certmgr=http://certmgr:8444", "--hsm-broker=http://hsm-broker:8443"]
+    environment:
+      AETHER_PG_URL: postgres://aether:aether@postgres:5432/aether?sslmode=disable
     depends_on:
       certmgr:
         condition: service_healthy
       hsm-broker:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8445/v1/health || exit 1"]
@@ -142,6 +146,11 @@ services:
       context: ../..
       dockerfile: services/audit/Dockerfile
     command: ["--listen=:8447"]
+    environment:
+      AETHER_PG_URL: postgres://aether:aether@postgres:5432/aether?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8447/v1/health || exit 1"]
       interval: 2s
@@ -155,6 +164,11 @@ services:
       context: ../..
       dockerfile: services/smds/Dockerfile
     command: ["--listen=:8448"]
+    environment:
+      AETHER_PG_URL: postgres://aether:aether@postgres:5432/aether?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:8448/v1/health || exit 1"]
       interval: 2s

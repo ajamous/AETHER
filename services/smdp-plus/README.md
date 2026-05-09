@@ -15,6 +15,7 @@ exposed by the gateway for upstream BSS.
 | ES9+ `getBoundProfilePackage` (§5.6.4)     | Skeleton      |
 | ES9+ `handleNotification` (§5.6.5)         | Skeleton      |
 | In-memory session store                    | Implemented   |
+| Postgres-backed session store              | Implemented (with TTL eviction) |
 | Redis session store                        | Not started   |
 | BPP generation (UPP → PPP → BPP)           | Not started — depends on SAIP codec + real ASN.1 modules |
 | State machine (Annex A)                    | Skeleton      |
