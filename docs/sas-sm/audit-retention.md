@@ -124,6 +124,30 @@ For the audit pack, schedule:
      in a fresh Postgres restore from backup; the recomputed tail
      hash MUST match the signed value.
   
+  Aether ships a stdlib-only Go CLI that does steps 1-3 (and
+  optionally step 4) in a single command:
+  
+  ```bash
+  make verify-anchor                                    # builds bin/aether-verify-anchor
+  ./bin/aether-verify-anchor \
+      --pubkey audit-anchor-pub.pem \
+      --anchor anchor-2026-05-09.json
+  
+  # Optional cross-check against a Postgres restore (step 4):
+  ./bin/aether-verify-anchor \
+      --pubkey audit-anchor-pub.pem \
+      --anchor anchor-2026-05-09.json \
+      --against-length 1234567 \
+      --against-tail-hash $(psql -tAXc \
+          'SELECT encode(hash, '\''hex'\'') FROM audit_entries ORDER BY seq DESC LIMIT 1')
+  ```
+  
+  Exit codes are documented (`0` OK, `1` bad input, `2` bad
+  signature, `3` cross-check mismatch) so the verifier slots
+  cleanly into a daily monitor or an auditor's nightly job. The
+  CLI is intentionally a single file with stdlib imports only —
+  an auditor can audit the verifier itself in a sitting.
+  
   Even if the entire Postgres is rebuilt from scratch, the daily
   signed anchor proves what the chain looked like on each day —
   and the signature proves the audit service issued it, not an
