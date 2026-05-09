@@ -12,6 +12,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/http"
@@ -40,6 +41,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/certs", s.handleListCerts)
 	mux.HandleFunc("GET /v1/certs/{name}", s.handleGetCert)
 	mux.HandleFunc("GET /v1/trust-store", s.handleTrustStore)
+	mux.HandleFunc("GET /v1/trust-store/pem", s.handleTrustStorePEM)
+	mux.HandleFunc("GET /v1/intermediates/pem", s.handleIntermediatesPEM)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	return mux
 }
@@ -142,6 +145,25 @@ func (s *Server) handleTrustStore(w http.ResponseWriter, _ *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// handleTrustStorePEM returns every loaded CI root concatenated as PEM,
+// for callers that need to verify peer cert chains (e.g. smdp-plus
+// validating an eUICC's response per SGP.22 §5.7.5).
+func (s *Server) handleTrustStorePEM(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	for _, c := range s.st.Roots() {
+		_ = pem.Encode(w, &pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})
+	}
+}
+
+// handleIntermediatesPEM returns the loaded intermediate CAs (e.g. EUM)
+// concatenated as PEM. Empty body if the store has no intermediates.
+func (s *Server) handleIntermediatesPEM(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/x-pem-file")
+	for _, c := range s.st.Intermediates() {
+		_ = pem.Encode(w, &pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})
+	}
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {

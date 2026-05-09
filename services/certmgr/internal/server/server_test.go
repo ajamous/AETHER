@@ -96,6 +96,25 @@ func TestServer_GetCert_PEM(t *testing.T) {
 	}
 }
 
+func TestServer_TrustStorePEM_AndIntermediatesPEM(t *testing.T) {
+	srv := httptest.NewServer(New(newTestStore(t)).Routes())
+	defer srv.Close()
+
+	for _, path := range []string{"/v1/trust-store/pem", "/v1/intermediates/pem"} {
+		resp, err := http.Get(srv.URL + path)
+		if err != nil {
+			t.Fatalf("get %s: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status %s = %d", path, resp.StatusCode)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.HasPrefix(string(body), "-----BEGIN CERTIFICATE-----") {
+			t.Fatalf("%s: expected PEM, got %q", path, string(body[:60]))
+		}
+	}
+}
+
 func TestServer_GetCert_NotFound(t *testing.T) {
 	srv := httptest.NewServer(New(newTestStore(t)).Routes())
 	defer srv.Close()

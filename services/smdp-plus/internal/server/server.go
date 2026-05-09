@@ -29,35 +29,45 @@ type Server struct {
 	sessions session.Store
 	hsm      *hsmclient.Client
 	identity *identity.Identity
+	trust    *identity.TrustMaterial
 	address  string // SM-DP+ public address (goes into ServerSigned1.serverAddress)
 }
 
 // Config holds the optional dependencies. New() works with the
-// zero-value config: signing is then disabled and ServerSigned1 fields
-// in initiateAuthentication responses are left nil. Setting HSM and
-// Identity enables signing.
+// zero-value config: signing and verification are disabled and the
+// server falls back to the older "skeleton" behaviour. Setting HSM
+// and Identity enables signing on initiateAuthentication; setting
+// Trust additionally enables eUICC verification on authenticateClient.
 type Config struct {
 	HSM      *hsmclient.Client
 	Identity *identity.Identity
+	Trust    *identity.TrustMaterial
 	Address  string
 }
 
 // New constructs a Server with the given session store and (optional)
-// signing dependencies.
+// dependencies.
 func New(s session.Store, cfgs ...Config) *Server {
 	srv := &Server{sessions: s}
 	if len(cfgs) > 0 {
 		srv.hsm = cfgs[0].HSM
 		srv.identity = cfgs[0].Identity
+		srv.trust = cfgs[0].Trust
 		srv.address = cfgs[0].Address
 	}
 	return srv
 }
 
-// signingEnabled reports whether the server has all the pieces it
-// needs to populate ServerSigned1/ServerSignature1/ServerCertificate.
+// signingEnabled reports whether the server can populate
+// ServerSigned1/ServerSignature1/ServerCertificate.
 func (s *Server) signingEnabled() bool {
 	return s.hsm != nil && s.identity != nil && s.address != ""
+}
+
+// verificationEnabled reports whether the server can verify the
+// eUICC's authenticateClient response.
+func (s *Server) verificationEnabled() bool {
+	return s.trust != nil && s.address != ""
 }
 
 // Routes returns an http.Handler with all endpoints mounted.
@@ -209,7 +219,25 @@ func nibble(c byte) (byte, error) {
 	return 0, fmt.Errorf("server: invalid hex nibble %q", c)
 }
 
-// handleAuthenticateClient implements SGP.22 §5.6.3 (skeleton).
+// handleAuthenticateClient implements SGP.22 §5.6.2 / §5.7.5.
+//
+// When verification is enabled (Config.Trust + Config.Address set):
+//
+//  1. Find the open session for this transactionId. 404 on miss,
+//     409 if not in `initiated` state.
+//  2. Verify the eUICC's cert chain (euiccCert → eumCert → CI root)
+//     against the certmgr-supplied trust store.
+//  3. Verify euiccSignature1 against euiccCert's public key over
+//     SHA-256(euiccSigned1).
+//  4. Confirm euiccSigned1.serverAddress matches the configured
+//     SM-DP+ address.
+//  5. Confirm euiccSigned1.serverChallenge matches what we issued
+//     in initiateAuthentication (replay defense).
+//  6. Transition the session to `authenticated` and return 200.
+//
+// When verification is disabled the older skeleton path is preserved
+// (state transition only, no cryptographic checks). This keeps unit
+// tests that don't bring up a trust store working.
 func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request) {
 	var req smdpv1.AuthenticateClientRequest
 	if !decodeJSON(w, r, &req) {
@@ -224,6 +252,36 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 		writeProblem(w, http.StatusConflict, fmt.Sprintf("session in state %q, expected initiated", sess.State))
 		return
 	}
+
+	if s.verificationEnabled() {
+		if len(req.EuiccSigned1DER) == 0 || len(req.EuiccSignature1) == 0 ||
+			len(req.EuiccCertDER) == 0 || len(req.EumCertDER) == 0 {
+			writeProblem(w, http.StatusBadRequest,
+				"euicc_signed1, euicc_signature1, euicc_certificate, eum_certificate all required")
+			return
+		}
+		res, err := signing.VerifyEuiccAuthenticate(
+			req.EuiccSigned1DER, req.EuiccSignature1,
+			req.EuiccCertDER, req.EumCertDER,
+			signing.VerifyOptions{
+				Roots:         s.trust.Roots,
+				Intermediates: s.trust.Intermediates,
+				ServerAddress: s.address,
+			},
+		)
+		if err != nil {
+			writeProblem(w, http.StatusUnauthorized, fmt.Sprintf("eUICC authentication failed: %v", err))
+			return
+		}
+		// Replay defense: serverChallenge in the eUICC's signed payload
+		// must match the one we issued for this session.
+		if !bytesEqual(res.EuiccSigned1.ServerChallenge, sess.ServerChallenge) {
+			writeProblem(w, http.StatusUnauthorized,
+				"euiccSigned1.serverChallenge does not match the value issued in initiateAuthentication")
+			return
+		}
+	}
+
 	sess.State = session.StateAuthenticated
 	if err := s.sessions.Update(sess); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("update: %v", err))
@@ -232,6 +290,22 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, smdpv1.AuthenticateClientResponse{
 		TransactionID: req.TransactionID,
 	})
+}
+
+// bytesEqual is a constant-time-ish equality check. We keep it
+// non-cryptographic because the values here are public per spec
+// (server- and eUICC-challenge are exchanged in the clear), but
+// the helper lives close to its caller for clarity.
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // handleGetBoundProfilePackage implements SGP.22 §5.6.4 (skeleton).
