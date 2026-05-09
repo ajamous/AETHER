@@ -27,7 +27,7 @@ The table below is the source of truth.
 | Documentation skeleton        | Implemented   | MkDocs Material site, ADRs 0001-0005               |
 | ASN.1 toolchain               | Skeleton      | Build glue + starter type with round-trip tests; spec modules pending vendoring |
 | `pkg/crypto`                  | Implemented   | ECDSA P-256, ECKA, X9.63-SHA-256 KDF, AES-128-GCM BSP. Brainpool P-256 r1 stubbed |
-| `services/hsm-broker`         | Skeleton      | Memory backend implemented + tested; SoftHSM lifecycle wired, ops pending |
+| `services/hsm-broker`         | Implemented   | Memory + SoftHSM backends with real ECDSA Sign / ECKA Derive / GenerateKeyPair / ListKeys verified against SoftHSM v2; cloud HSM backends pending |
 | `services/certmgr`            | Implemented   | Cert chain load/verify, lab/prod modes, expiry metrics, lab-chain generator |
 | `services/smdp-plus`          | Skeleton      | ES9+ endpoint shapes + state machine; BPP returns 501 until SAIP codec lands |
 | `services/smds`               | Skeleton      | ES11 + ES12 with end-to-end discovery flow tested in-memory; signing pending |

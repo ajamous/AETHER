@@ -31,9 +31,16 @@ Crypto primitives (`pkg/crypto`):
 - Brainpool P-256 r1 stubbed pending dependency-vetted curve.
 
 Services (`services/`):
-- `hsm-broker`: PKCS#11 façade. Memory backend implemented, SoftHSM
-  lifecycle wired (ops pending). HTTP+JSON server with RFC 7807
-  errors. Proto contract in `api/v1/hsm.proto`.
+- `hsm-broker`: PKCS#11 façade. Memory and SoftHSM backends both
+  implement Sign / GenerateKeyPair / DeriveKey / ListKeys. SoftHSM
+  backend exercises real PKCS#11 calls (`CKM_EC_KEY_PAIR_GEN`,
+  `CKM_ECDSA`, `CKM_ECDH1_DERIVE` with `CKD_NULL`) and is verified by
+  an integration test in CI that installs SoftHSM v2 and round-trips
+  a signature against a Go-side ECDSA verify. The X9.63-SHA-256 KDF
+  runs in-process on SoftHSM (which doesn't expose `CKD_SHA256_KDF`)
+  and the intermediate shared secret is zeroed and destroyed.
+  HTTP+JSON server with RFC 7807 errors. Proto contract in
+  `api/v1/hsm.proto`.
 - `certmgr`: cert chain loading and verification, lab and production
   modes (per ADR 0004), expiry Prometheus metrics, lab-chain
   generator for tests and the local lab.
