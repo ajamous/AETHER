@@ -1,0 +1,102 @@
+// Aether HSM Broker gRPC API.
+//
+// This proto file is the canonical wire-format definition of the
+// broker contract. Today the service is implemented as HTTP+JSON
+// (see internal/server) using Go types that mirror these messages
+// 1:1; a follow-up PR replaces the HTTP server with a generated
+// gRPC server and clients without changing the broker semantics.
+//
+// Design rule: never expose raw private key material on the wire.
+// Operations return handles or signed/encrypted output, not keys.
+
+syntax = "proto3";
+
+package aether.hsm.v1;
+
+option go_package = "github.com/ajamous/aether/services/hsm-broker/api/v1;hsmv1";
+
+service HSMBroker {
+  rpc Sign(SignRequest) returns (SignResponse);
+  rpc Decrypt(DecryptRequest) returns (DecryptResponse);
+  rpc DeriveKey(DeriveKeyRequest) returns (DeriveKeyResponse);
+  rpc GenerateKeyPair(GenerateKeyPairRequest) returns (GenerateKeyPairResponse);
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+enum Curve {
+  CURVE_UNSPECIFIED = 0;
+  CURVE_P256 = 1;
+  CURVE_BRAINPOOL_P256_R1 = 2;
+}
+
+enum HashAlg {
+  HASH_UNSPECIFIED = 0;
+  HASH_SHA256 = 1;
+  HASH_SHA384 = 2;
+  HASH_SHA512 = 3;
+}
+
+enum KeyKind {
+  KEY_KIND_UNSPECIFIED = 0;
+  KEY_KIND_ECDSA = 1;
+  KEY_KIND_ECKA = 2;
+}
+
+message KeyHandle {
+  string id = 1;        // opaque to callers; stable for the lifetime of the key
+  string label = 2;     // human-readable, e.g. "DPpb"
+  KeyKind kind = 3;
+  Curve curve = 4;
+}
+
+message SignRequest {
+  string key_id = 1;
+  bytes digest = 2;     // pre-computed; matches PKCS#11 semantics
+  HashAlg digest_alg = 3;
+}
+message SignResponse {
+  bytes signature_der = 1;
+}
+
+message DecryptRequest {
+  string key_id = 1;
+  bytes ciphertext = 2;
+}
+message DecryptResponse {
+  bytes plaintext = 1;
+}
+
+message DeriveKeyRequest {
+  string key_id = 1;       // local ECKA private key (HSM-resident)
+  bytes peer_public = 2;   // peer's ECDH public key (uncompressed point)
+  bytes shared_info = 3;   // X9.63 KDF shared-info (SGP.22 §2.6.4)
+  uint32 key_len = 4;      // bytes
+}
+message DeriveKeyResponse {
+  string session_key_id = 1;  // handle to the derived session key (HSM-resident)
+}
+
+message GenerateKeyPairRequest {
+  string label = 1;
+  KeyKind kind = 2;
+  Curve curve = 3;
+}
+message GenerateKeyPairResponse {
+  KeyHandle handle = 1;
+  bytes public_key = 2;  // uncompressed EC point (X9.63)
+}
+
+message ListKeysRequest {
+  string label_prefix = 1;  // optional filter
+}
+message ListKeysResponse {
+  repeated KeyHandle keys = 1;
+}
+
+message HealthRequest {}
+message HealthResponse {
+  bool ready = 1;
+  string backend = 2;       // "memory" | "softhsm" | "aws-cloudhsm" | ...
+  uint32 active_sessions = 3;
+}

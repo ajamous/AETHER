@@ -1,0 +1,212 @@
+# Aether local lab.
+#
+# `make lab-up` from the repo root brings this up. Target: under 60s
+# from a fresh clone to all services healthy.
+#
+# This stack is for development, learning, and demo. It uses a
+# generated SGP.26-style cert chain (NOT real SGP.26 material) and the
+# in-memory hsm-broker backend (NOT a real HSM). Switch to `prod-reference.yml`
+# (forthcoming) for the production reference topology.
+
+name: aether-lab
+
+services:
+
+  # --- Datastores ---------------------------------------------------------
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: aether
+      POSTGRES_DB: aether
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether -d aether"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  nats:
+    image: nats:2-alpine
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8222/healthz | grep -q ok || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  # --- Bootstrap: lab cert chain -----------------------------------------
+
+  certgen:
+    image: golang:1.22-alpine
+    working_dir: /src
+    volumes:
+      - ../..:/src:ro
+      - certdata:/certs
+    command: >
+      sh -c '
+        set -e;
+        cd services/certmgr &&
+        go run ./cmd/certmgr --generate-lab=/certs &&
+        echo "lab chain ready in /certs:" &&
+        ls -la /certs
+      '
+    # certgen exits 0 once the chain is on the volume; downstream
+    # services depend_on it with condition: service_completed_successfully
+
+  # --- Aether services ----------------------------------------------------
+
+  hsm-broker:
+    build:
+      context: ../..
+      dockerfile: services/hsm-broker/Dockerfile
+    command: ["--backend=memory", "--listen=:8443"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8443/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8443:8443"
+
+  certmgr:
+    build:
+      context: ../..
+      dockerfile: services/certmgr/Dockerfile
+    depends_on:
+      certgen:
+        condition: service_completed_successfully
+    volumes:
+      - certdata:/certs:ro
+    command:
+      - "--mode=lab"
+      - "--listen=:8444"
+      - "--trust-store=/certs/ci-roots.pem"
+      - "--intermediates=/certs/eum.pem"
+      - "--dp-tls-cert=/certs/DPtls.pem"
+      - "--dp-auth-cert=/certs/DPauth.pem"
+      - "--dp-pb-cert=/certs/DPpb.pem"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8444/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8444:8444"
+
+  smdp-plus:
+    build:
+      context: ../..
+      dockerfile: services/smdp-plus/Dockerfile
+    command: ["--listen=:8445", "--certmgr=http://certmgr:8444", "--hsm-broker=http://hsm-broker:8443"]
+    depends_on:
+      certmgr:
+        condition: service_healthy
+      hsm-broker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8445/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8445:8445"
+
+  profile-builder:
+    build:
+      context: ../..
+      dockerfile: services/profile-builder/Dockerfile
+    command: ["--listen=:8446", "--template-dir=/etc/aether/profile-builder/templates"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8446/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8446:8446"
+
+  audit:
+    build:
+      context: ../..
+      dockerfile: services/audit/Dockerfile
+    command: ["--listen=:8447"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8447/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8447:8447"
+
+  smds:
+    build:
+      context: ../..
+      dockerfile: services/smds/Dockerfile
+    command: ["--listen=:8448"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8448/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8448:8448"
+
+  gateway:
+    build:
+      context: ../..
+      dockerfile: services/gateway/Dockerfile
+    command:
+      - "--listen=:8080"
+      - "--profile-builder=http://profile-builder:8446"
+      - "--smdp-plus=http://smdp-plus:8445"
+      - "--certmgr=http://certmgr:8444"
+      - "--smds=http://smds:8448"
+    depends_on:
+      profile-builder:
+        condition: service_healthy
+      smdp-plus:
+        condition: service_healthy
+      certmgr:
+        condition: service_healthy
+      audit:
+        condition: service_healthy
+      smds:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/v1/health || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8080:8080"
+
+  admin-ui:
+    build:
+      context: ../..
+      dockerfile: ui/admin/Dockerfile
+    environment:
+      AETHER_GATEWAY_URL: http://gateway:8080
+      AETHER_AUDIT_URL: http://audit:8447
+      AETHER_CERTMGR_URL: http://certmgr:8444
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata: {}
+  natsdata: {}
+  certdata: {}

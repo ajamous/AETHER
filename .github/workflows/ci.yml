@@ -1,0 +1,121 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Signed-off-by on every commit
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          missing=0
+          for sha in $(git rev-list "$base..$head"); do
+            if ! git log -1 --format=%B "$sha" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::commit $sha is missing a DCO sign-off line"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  build:
+    name: build / test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: go vet
+        run: |
+          if find . -name go.mod -not -path './vendor/*' | grep -q .; then
+            go vet ./...
+          else
+            echo "no Go modules yet; skipping"
+          fi
+      - name: build
+        run: |
+          if find . -name go.mod -not -path './vendor/*' | grep -q .; then
+            go build ./...
+          else
+            echo "no Go modules yet; skipping"
+          fi
+      - name: test
+        run: |
+          if find . -name go.mod -not -path './vendor/*' | grep -q .; then
+            go test ./...
+          else
+            echo "no Go modules yet; skipping"
+          fi
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=5m
+        continue-on-error: true
+
+  ui:
+    name: ui build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ui/admin/package-lock.json
+      - name: install
+        working-directory: ui/admin
+        run: npm ci || npm install
+      - name: typecheck
+        working-directory: ui/admin
+        run: npm run typecheck
+      - name: build
+        working-directory: ui/admin
+        run: npm run build
+
+  docs:
+    name: docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: install mkdocs
+        run: pip install mkdocs-material
+      - name: build site
+        run: |
+          if [ -f mkdocs.yml ]; then
+            mkdocs build --strict
+          else
+            echo "mkdocs.yml not present yet; skipping"
+          fi

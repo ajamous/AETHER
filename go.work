@@ -1,0 +1,18 @@
+go 1.24.7
+
+// Aether Go workspace.
+//
+// Service and shared-library modules are added here as they land.
+
+use (
+	./pkg/asn1/sgp22/go
+	./pkg/crypto
+	./services/audit
+	./services/certmgr
+	./services/gateway
+	./services/hsm-broker
+	./services/profile-builder
+	./services/smdp-plus
+	./services/smds
+	./test/e2e
+)

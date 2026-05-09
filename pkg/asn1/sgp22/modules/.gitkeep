@@ -1,0 +1,5 @@
+# Placeholder so the directory is tracked.
+#
+# Real ASN.1 module files (PEDefinitions.asn, RSPDefinitions.asn, etc.)
+# get vendored here from GSMA SGP.22 Annex B. See ../README.md for the
+# vendoring procedure.
