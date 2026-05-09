@@ -247,8 +247,12 @@ jobs:
           exit $fail
 
   terraform-validate:
-    name: terraform fmt + validate (aws)
+    name: terraform fmt + validate
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: [aws, gcp]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -256,15 +260,15 @@ jobs:
           terraform_version: 1.10.3
           terraform_wrapper: false
       - name: terraform fmt
-        run: terraform -chdir=deployments/terraform/aws fmt -recursive -check
+        run: terraform -chdir=deployments/terraform/${{ matrix.cloud }} fmt -recursive -check
       - name: terraform init (root)
-        run: terraform -chdir=deployments/terraform/aws init -backend=false
+        run: terraform -chdir=deployments/terraform/${{ matrix.cloud }} init -backend=false
       - name: terraform validate (root)
-        run: terraform -chdir=deployments/terraform/aws validate
+        run: terraform -chdir=deployments/terraform/${{ matrix.cloud }} validate
       - name: terraform init (examples/full)
-        run: terraform -chdir=deployments/terraform/aws/examples/full init -backend=false
+        run: terraform -chdir=deployments/terraform/${{ matrix.cloud }}/examples/full init -backend=false
       - name: terraform validate (examples/full)
-        run: terraform -chdir=deployments/terraform/aws/examples/full validate
+        run: terraform -chdir=deployments/terraform/${{ matrix.cloud }}/examples/full validate
 
   ui:
     name: ui build

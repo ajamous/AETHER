@@ -241,10 +241,20 @@ hsm-broker is identical.
 - Multi-region active-active. Single region is correct for
   SAS-SM baseline; multi-region is a Phase 6 follow-up.
 - Cost optimisation past the basic shape.
-- Pre-built Terraform modules. The IaC modules under
-  `deployments/terraform/gcp/` are planned and not yet present.
-  Until they land, this document is the spec your IaC has to
-  satisfy.
+- The Cloud HSM key ceremony. Terraform creates the key ring
+  and IAM bindings; the two-person key-ceremony procedure in
+  [key-ceremony.md](key-ceremony.md) generates the actual
+  identity keys against it.
+- Workload Identity binding to chart ServiceAccounts. The
+  Terraform module creates the audit and hsm-broker GCP service
+  accounts but the binding to the chart's Kubernetes
+  ServiceAccount (named `<release>-aether`) is documented as a
+  post-deploy `gcloud iam service-accounts add-iam-policy-binding`
+  call. See the module's README.
+
+The Terraform modules implementing this topology live under
+`deployments/terraform/gcp/`. See that directory's README for
+inputs, outputs, and the `examples/full` canonical wiring.
 
 ## Cross-references
 
