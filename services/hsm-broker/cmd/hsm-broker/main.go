@@ -5,8 +5,13 @@
 //
 // Backends:
 //   - memory: in-memory, for tests, CI, and demos. The default.
-//   - softhsm: PKCS#11 module path (typically SoftHSM v2 in lab,
-//     a real HSM in production). See ADR 0003.
+//   - pkcs11 (alias: softhsm): generic PKCS#11 module path. SoftHSM
+//     v2 is the lab default; AWS CloudHSM, GCP Cloud KMS PKCS#11,
+//     Azure Managed HSM (via shim), Thales Luna, and Utimaco
+//     SecurityServer all use this same code path with a different
+//     `.so` and credential plumbing — see
+//     docs/sas-sm/hsm-vendors.md for per-vendor configuration.
+//     See ADR 0003 for the architecture rationale.
 package main
 
 import (
@@ -33,11 +38,11 @@ func main() {
 
 func run() error {
 	var (
-		backendName = flag.String("backend", "memory", "backend: memory | softhsm")
+		backendName = flag.String("backend", "memory", "backend: memory | pkcs11 (alias: softhsm)")
 		listen      = flag.String("listen", ":8443", "HTTP listen address")
-		pkcs11Lib   = flag.String("pkcs11-lib", "", "PKCS#11 .so path (softhsm backend only)")
-		slot        = flag.Uint("slot", 0, "PKCS#11 slot id (softhsm backend only)")
-		pin         = flag.String("pin", "", "PKCS#11 PIN (softhsm backend only; prefer env var HSM_PIN)")
+		pkcs11Lib   = flag.String("pkcs11-lib", "", "PKCS#11 .so path (pkcs11 backend only). See docs/sas-sm/hsm-vendors.md for per-vendor paths.")
+		slot        = flag.Uint("slot", 0, "PKCS#11 slot id (pkcs11 backend only)")
+		pin         = flag.String("pin", "", "PKCS#11 PIN (pkcs11 backend only; prefer env var HSM_PIN)")
 	)
 	flag.Parse()
 
@@ -53,18 +58,24 @@ func run() error {
 		logger.Warn("hsm-broker started with memory backend; not for production",
 			slog.String("backend", "memory"))
 		b = memory.New()
-	case "softhsm":
+	case "pkcs11", "softhsm":
+		// `softhsm` is the historical name from when SoftHSM v2 was
+		// the only PKCS#11 backend exercised in CI. The same code
+		// path serves AWS CloudHSM, GCP Cloud KMS PKCS#11, Azure
+		// Managed HSM, Thales Luna, and Utimaco SecurityServer.
+		// `pkcs11` is the preferred name; `softhsm` is kept as an
+		// alias for backward compatibility.
 		hsm, err := softhsm.New(softhsm.Config{
 			LibraryPath: *pkcs11Lib,
 			Slot:        *slot,
 			PIN:         *pin,
 		})
 		if err != nil {
-			return fmt.Errorf("softhsm backend: %w", err)
+			return fmt.Errorf("pkcs11 backend: %w", err)
 		}
 		b = hsm
 	default:
-		return fmt.Errorf("unknown backend %q (use 'memory' or 'softhsm')", *backendName)
+		return fmt.Errorf("unknown backend %q (use 'memory', 'pkcs11', or 'softhsm')", *backendName)
 	}
 
 	defer func() {

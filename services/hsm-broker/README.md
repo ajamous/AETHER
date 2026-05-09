@@ -13,8 +13,8 @@ for the rationale.
 | ---------------------------------------- | ------------- |
 | Broker Go interface (`internal/broker`)  | Implemented   |
 | Memory backend (test / CI fallback)      | Implemented   |
-| SoftHSM v2 backend (PKCS#11)             | Implemented (Sign / GenerateKeyPair / DeriveKey / ListKeys; Decrypt pending) |
-| AWS CloudHSM / GCP / Azure / Thales / Utimaco backends | Not started |
+| PKCS#11 backend (SoftHSM v2 lab default) | Implemented (Sign / GenerateKeyPair / DeriveKey / ListKeys; Decrypt pending). End-to-end CI integration against SoftHSM v2 |
+| AWS CloudHSM / GCP / Azure / Thales / Utimaco | Implemented via the PKCS#11 backend (one code path; the `--backend=pkcs11` alias replaces the `--backend=softhsm` historical name, which is kept). Per-vendor `.so` paths, slot/PIN handling, and quirks documented in [docs/sas-sm/hsm-vendors.md](../../docs/sas-sm/hsm-vendors.md). Hardware-in-the-loop verification per vendor remains an honest follow-up bench |
 | HTTP+JSON server                         | Implemented   |
 | gRPC server                              | Pending — see "Wire format" below |
 | Health probe                             | Implemented   |

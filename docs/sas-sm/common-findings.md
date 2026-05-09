@@ -272,6 +272,9 @@ deployed version was built from signed-off commits.
 - [Gap analysis](gap-analysis.md) — full mapping of SAS-SM
   control families to platform features
 - [Key ceremony](key-ceremony.md) — addresses F2 and F3
+- [HSM vendor configuration](hsm-vendors.md) — per-vendor `.so`
+  paths and quirks for AWS CloudHSM, GCP Cloud HSM, Azure
+  Managed HSM, Thales Luna, Utimaco
 - [RBAC and segregation of duties](rbac.md) — addresses F4, F10, F11
 - [Audit log retention](audit-retention.md) — addresses F4, F5, F6
 - [Disaster recovery](disaster-recovery.md) — addresses F14, F15
