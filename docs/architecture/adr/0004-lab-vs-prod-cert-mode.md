@@ -94,4 +94,4 @@ Negative:
 
 - GSMA SGP.26 (Test Certificate Specification)
 - GSMA SGP.22 §4.5 (Certificates and PKI)
-- [README cert mode example](../../../README.md)
+- [README cert mode example](https://github.com/ajamous/aether/blob/main/README.md)

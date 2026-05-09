@@ -88,6 +88,11 @@ nav:
       - operations/index.md
   - SAS-SM readiness:
       - sas-sm/index.md
+      - 'Gap analysis': sas-sm/gap-analysis.md
+      - 'Key ceremony': sas-sm/key-ceremony.md
+      - 'RBAC and SoD': sas-sm/rbac.md
+      - 'Audit log retention': sas-sm/audit-retention.md
+      - 'Reference AWS deployment': sas-sm/reference-aws.md
 
 extra:
   social:

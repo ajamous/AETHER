@@ -41,7 +41,7 @@ The table below is the source of truth.
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
 | Helm chart                    | Implemented   | Lab + production install paths render and lint; cert-init Job for lab pending |
 | Terraform modules             | Not started   |                                                    |
-| SAS-SM evidence templates     | Not started   | Free in-repo, no paid tier — see `docs/sas-sm/`    |
+| SAS-SM evidence templates     | Partial       | Gap analysis, key ceremony + form, RBAC manifests, audit retention, AWS reference deployment all in `docs/sas-sm/` (free, no paid tier) |
 
 "Skeleton" means the service runs, exposes the documented HTTP
 shape, has tests passing, and has the dependencies it needs for
