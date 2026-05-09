@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+UI: forward Bearer tokens to the gateway (`ui/admin/`):
+- Auth.js v5 JWT callback now captures the IdP's `id_token` on
+  sign-in and threads it through the session callback so it's
+  available in server-side fetches. Mirrors the standard
+  Auth.js pattern but explicitly chooses `id_token` (the
+  IdP-signed proof of who's logged in) over `access_token` —
+  the gateway gates on identity, not on a separate API token,
+  and aligning to `id_token` keeps every server-to-gateway
+  call bound to the originating session.
+- `lib/api.ts` gains `gatewayAuthHeaders(url)`: server-side
+  helper that reads `auth()` and returns
+  `Authorization: Bearer ${session.idToken}` only when the
+  destination is the gateway URL. AUDIT and CERTMGR direct
+  fetches do NOT receive the Bearer — those services have no
+  OIDC gate and forwarding the token to them would leak the
+  operator's `id_token` to services that don't need it.
+  Wrapped in try/catch so a malformed session doesn't crash
+  server rendering.
+- `tsc --noEmit` and `next build` clean.
+- README documents the wiring: the UI captures `id_token` on
+  sign-in, forwards on gateway calls only, audience must match
+  the gateway's `--oidc-audience`. Includes the canary advice:
+  a sustained `aether_gateway_admin_unauthorized_total{reason="wrong_audience"}`
+  typically means the audience is misconfigured on one side.
+
+This closes the operational loop opened by the previous gateway
+OIDC PR: enabling `--oidc-issuer` on the gateway no longer breaks
+the UI.
+
 Gateway OIDC for `/v1/*` admin paths (`services/gateway/internal/oidc/`):
 - New `oidc` package: stdlib-only JWT verifier with discovery,
   JWKS cache, and middleware. The package is intentionally

@@ -51,6 +51,27 @@ Sign-out is a button in the sidebar that POSTs to
 `/api/auth/signout`. The signed-out user's email shows in the
 sidebar, so the operator always knows who they are.
 
+### Bearer token forwarding to the gateway
+
+When OIDC is enabled, the UI captures the IdP's `id_token` on
+sign-in (in the `auth.ts` JWT callback) and forwards it as
+`Authorization: Bearer ${idToken}` on every server-side fetch
+to the gateway. This lets you turn on the gateway's OIDC gate
+(`--oidc-issuer` + `--oidc-audience`) without breaking the UI.
+
+Configure the gateway's expected audience to match the UI's
+`AUTH_OIDC_CLIENT_ID` (or whatever your IdP includes in `aud`
+for the UI's tokens). The gateway's
+`aether_gateway_admin_unauthorized_total{reason}` counter is
+the canary if anything goes wrong: a sustained
+`reason="wrong_audience"` typically means the audience is
+misconfigured on one side.
+
+The Bearer is forwarded ONLY to the gateway URL. Calls direct to
+`AUDIT` and `CERTMGR` do not include it — those services have no
+OIDC gate, and forwarding the token to them would leak the
+operator's `id_token` to services that don't need it.
+
 ## Running
 
 ```
