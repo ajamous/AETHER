@@ -39,7 +39,7 @@ The table below is the source of truth.
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
 | Conformance harness (SGP.23)  | Not started   |                                                    |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
-| Helm chart                    | Not started   |                                                    |
+| Helm chart                    | Implemented   | Lab + production install paths render and lint; cert-init Job for lab pending |
 | Terraform modules             | Not started   |                                                    |
 | SAS-SM evidence templates     | Not started   | Free in-repo, no paid tier — see `docs/sas-sm/`    |
 

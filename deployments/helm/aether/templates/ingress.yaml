@@ -1,0 +1,46 @@
+{{- if .Values.ingress.enabled -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "aether.fullname" . }}
+  labels: {{- include "aether.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /gsma/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "aether.fullname" . }}-gateway
+                port:
+                  number: {{ .Values.gateway.service.port }}
+          - path: /v1/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "aether.fullname" . }}-gateway
+                port:
+                  number: {{ .Values.gateway.service.port }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "aether.fullname" . }}-ui
+                port:
+                  number: {{ .Values.ui.service.port }}
+{{- end -}}

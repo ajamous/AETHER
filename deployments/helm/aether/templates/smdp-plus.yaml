@@ -1,0 +1,12 @@
+{{- $env := list -}}
+{{- if .Values.postgres.enabled -}}
+{{- $env = append $env (dict "name" "AETHER_PG_URL" "value" (include "aether.postgresUrl" .)) -}}
+{{- else if .Values.postgresUrl -}}
+{{- $env = append $env (dict "name" "AETHER_PG_URL" "value" .Values.postgresUrl) -}}
+{{- end -}}
+{{- $args := list -}}
+{{- $args = append $args (printf "--listen=:%d" (int .Values.smdpPlus.service.port)) -}}
+{{- $args = append $args (printf "--certmgr=http://%s-certmgr:%d" (include "aether.fullname" .) (int .Values.certmgr.service.port)) -}}
+{{- $args = append $args (printf "--hsm-broker=http://%s-hsm-broker:%d" (include "aether.fullname" .) (int .Values.hsmBroker.service.port)) -}}
+{{- $args = append $args (printf "--session-ttl=%s" .Values.smdpPlus.sessionTtl) -}}
+{{ include "aether.backendDeploy" (list . .Values.smdpPlus "smdp-plus" $env $args) }}

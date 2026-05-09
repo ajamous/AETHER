@@ -1,0 +1,8 @@
+{{- $env := list -}}
+{{- $args := list -}}
+{{- $args = append $args (printf "--listen=:%d" (int .Values.gateway.service.port)) -}}
+{{- $args = append $args (printf "--profile-builder=http://%s-profile-builder:%d" (include "aether.fullname" .) (int .Values.profileBuilder.service.port)) -}}
+{{- $args = append $args (printf "--smdp-plus=http://%s-smdp-plus:%d" (include "aether.fullname" .) (int .Values.smdpPlus.service.port)) -}}
+{{- $args = append $args (printf "--certmgr=http://%s-certmgr:%d" (include "aether.fullname" .) (int .Values.certmgr.service.port)) -}}
+{{- $args = append $args (printf "--smds=http://%s-smds:%d" (include "aether.fullname" .) (int .Values.smds.service.port)) -}}
+{{ include "aether.backendDeploy" (list . .Values.gateway "gateway" $env $args) }}

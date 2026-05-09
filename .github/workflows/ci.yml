@@ -151,6 +151,29 @@ jobs:
           SOFTHSM2_CONF: /tmp/softhsm-test/softhsm2.conf
         run: go test -count=1 ./internal/backend/softhsm/... -v
 
+  helm:
+    name: helm chart lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.20.2
+      - name: helm lint
+        run: helm lint deployments/helm/aether
+      - name: helm template (lab defaults)
+        run: helm template ci deployments/helm/aether > /tmp/lab.yaml
+      - name: helm template (production-style override)
+        run: |
+          helm template ci deployments/helm/aether \
+            --set certmgr.mode=production \
+            --set certmgr.trustStore="$(printf -- '-----BEGIN CERTIFICATE-----\nFAKE\n-----END CERTIFICATE-----')" \
+            --set hsmBroker.backend=softhsm \
+            --set hsmBroker.pkcs11.pinSecret.name=hsm-pin \
+            --set ingress.enabled=true \
+            --set ingress.host=aether.example.com \
+            > /tmp/prod.yaml
+
   ui:
     name: ui build
     runs-on: ubuntu-latest
