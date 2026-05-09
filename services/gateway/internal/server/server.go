@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/ajamous/aether/services/gateway/internal/metrics"
+	"github.com/ajamous/aether/services/gateway/internal/oidc"
 	"github.com/ajamous/aether/services/gateway/internal/ratelimit"
 	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
@@ -45,6 +46,10 @@ type Server struct {
 	// Rate limiter for /gsma/rsp2/* paths. Nil = disabled.
 	rateLimiter       *ratelimit.Limiter
 	rateLimitRejected *metrics.LabeledCounter
+
+	// OIDC verifier for /v1/* admin paths. Nil = disabled.
+	oidcVerifier      *oidc.Verifier
+	adminUnauthorized *metrics.LabeledCounter
 }
 
 type Config struct {
@@ -61,6 +66,12 @@ type Config struct {
 	// be > 0 to enable; lab default is disabled.
 	RateLimitRPS   float64
 	RateLimitBurst int
+
+	// OIDC for the /v1/* admin surface. Nil OIDCVerifier disables
+	// the gate (lab default). The verifier is built outside the
+	// server constructor because OIDC discovery is a network call
+	// and should be done at startup with an explicit context.
+	OIDCVerifier *oidc.Verifier
 }
 
 // New constructs a Server. Returns an error if the TLS configuration
@@ -99,6 +110,22 @@ func New(cfg Config) (*Server, error) {
 			"class",
 			"es2plus", "es9plus",
 		),
+		oidcVerifier: cfg.OIDCVerifier,
+		adminUnauthorized: metrics.NewLabeledCounter(
+			"aether_gateway_admin_unauthorized_total",
+			"Count of 401 Unauthorized responses on /v1/* admin paths by reason.",
+			"reason",
+			string(oidc.ReasonNoToken),
+			string(oidc.ReasonMalformed),
+			string(oidc.ReasonUnsupportedAlg),
+			string(oidc.ReasonUnknownKID),
+			string(oidc.ReasonBadSignature),
+			string(oidc.ReasonWrongIssuer),
+			string(oidc.ReasonWrongAudience),
+			string(oidc.ReasonExpired),
+			string(oidc.ReasonNotYetValid),
+			string(oidc.ReasonJWKSFetchFailed),
+		),
 	}, nil
 }
 
@@ -122,22 +149,28 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/eim/devices", s.proxy("eim", "/v1/devices"))
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
-	// Middleware order: rate limit FIRST, then mTLS gate. We want
-	// 429 responses to short-circuit the cert verification path so
-	// a flood of cert-less requests can't burn CPU on chain checks.
-	// Both middlewares are no-op pass-throughs when their config
-	// is unset (lab default).
+	// Middleware order: rate limit FIRST, then mTLS gate, then OIDC.
+	// rate-limit before mTLS so a flood of cert-less requests can't
+	// burn CPU on chain checks. OIDC is innermost because it only
+	// applies to /v1/* and is a no-op for /gsma/rsp2/* — putting it
+	// at the outside would be wasteful work for the public surface.
+	// All three are no-op pass-throughs when their config is unset
+	// (lab default).
 	mtls := tlsconf.ES2PlusMTLSMiddleware(s.es2plusClientCAs, s.es2plusUnauthorized)
 	rate := ratelimit.Middleware(s.rateLimiter, func(class string) {
 		s.rateLimitRejected.Inc(class)
 	})
-	return rate(mtls(mux))
+	admin := oidc.Middleware(s.oidcVerifier, func(reason oidc.Reason) {
+		s.adminUnauthorized.Inc(string(reason))
+	})
+	return rate(mtls(admin(mux)))
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 	s.es2plusUnauthorized.Write(w)
 	s.rateLimitRejected.Write(w)
+	s.adminUnauthorized.Write(w)
 }
 
 // ListenAndServe runs the gateway. If the configured mode includes

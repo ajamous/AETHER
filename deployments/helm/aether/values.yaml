@@ -217,6 +217,21 @@ gateway:
   tls:
     serverSecret: ""
     es2plusClientCASecret: ""
+  # Rate limiting on /gsma/rsp2/* (per source IP). Both must be > 0
+  # to enable; lab default is disabled. See services/gateway/README.md
+  # for the full SAS-SM rationale (default key is RemoteAddr; do not
+  # trust X-Forwarded-For without a trusted-proxy CIDR list at the LB).
+  rateLimit:
+    rps: 0
+    burst: 0
+  # Bearer-token OIDC on /v1/* admin paths. Both `issuer` and
+  # `audience` must be set to enable; lab default is disabled.
+  # /v1/health and /metrics bypass unconditionally so kube-probes
+  # and Prometheus can scrape unauthenticated. RS256 + ES256 only;
+  # symmetric algorithms are deliberately rejected.
+  oidc:
+    issuer: ""
+    audience: ""
   resources:
     requests:
       cpu: 100m

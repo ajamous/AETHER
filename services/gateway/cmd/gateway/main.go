@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/ajamous/aether/services/gateway/internal/oidc"
 	"github.com/ajamous/aether/services/gateway/internal/server"
 	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
@@ -41,10 +43,35 @@ func run() error {
 		// gateway).
 		rateLimitRPS   = flag.Float64("rate-limit-rps", 0, "Steady-state requests/sec per source on /gsma/rsp2/*. 0 disables.")
 		rateLimitBurst = flag.Int("rate-limit-burst", 0, "Token-bucket burst size per source. 0 disables.")
+
+		// OIDC for /v1/* admin paths. Both --oidc-issuer and
+		// --oidc-audience must be set to enable. Lab default is
+		// disabled. /v1/health and /metrics bypass unconditionally.
+		oidcIssuer   = flag.String("oidc-issuer", "", "OIDC issuer URL (must match `iss` in admin tokens). Empty disables OIDC on /v1/*.")
+		oidcAudience = flag.String("oidc-audience", "", "Required audience (`aud`) on admin tokens.")
 	)
 	flag.Parse()
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+	// OIDC discovery is a network call. Time-box it so a flaky IdP
+	// doesn't make the gateway hang at startup.
+	var oidcVerifier *oidc.Verifier
+	if *oidcIssuer != "" {
+		if *oidcAudience == "" {
+			return fmt.Errorf("--oidc-audience is required when --oidc-issuer is set")
+		}
+		dctx, dcancel := context.WithTimeout(context.Background(), 10*time.Second)
+		var err error
+		oidcVerifier, err = oidc.Discover(dctx, oidc.Config{
+			Issuer:   *oidcIssuer,
+			Audience: *oidcAudience,
+		})
+		dcancel()
+		if err != nil {
+			return fmt.Errorf("oidc discovery: %w", err)
+		}
+	}
 
 	srv, err := server.New(server.Config{
 		ProfileBuilder: *profileBuilder,
@@ -59,6 +86,7 @@ func run() error {
 		},
 		RateLimitRPS:   *rateLimitRPS,
 		RateLimitBurst: *rateLimitBurst,
+		OIDCVerifier:   oidcVerifier,
 	})
 	if err != nil {
 		return fmt.Errorf("init: %w", err)
@@ -79,11 +107,16 @@ func run() error {
 	if *rateLimitRPS > 0 && *rateLimitBurst >= 1 {
 		rateLimitMode = fmt.Sprintf("%.1f rps per source / burst %d", *rateLimitRPS, *rateLimitBurst)
 	}
+	oidcMode := "disabled"
+	if oidcVerifier != nil {
+		oidcMode = fmt.Sprintf("issuer=%s audience=%s", *oidcIssuer, *oidcAudience)
+	}
 
 	logger.Info("gateway listening",
 		slog.String("addr", *listen),
 		slog.String("mode", mode),
 		slog.String("rate_limit", rateLimitMode),
+		slog.String("oidc", oidcMode),
 		slog.String("profile_builder", *profileBuilder),
 		slog.String("smdp_plus", *smdpPlus),
 		slog.String("certmgr", *certmgr),
@@ -95,6 +128,9 @@ func run() error {
 	}
 	if rateLimitMode == "disabled" {
 		logger.Warn("rate limiting DISABLED (set --rate-limit-rps and --rate-limit-burst); /gsma/rsp2/* has no per-source quota")
+	}
+	if oidcMode == "disabled" {
+		logger.Warn("OIDC DISABLED (set --oidc-issuer and --oidc-audience); /v1/* admin paths are unauthenticated")
 	}
 	return srv.ListenAndServe(ctx, *listen)
 }
