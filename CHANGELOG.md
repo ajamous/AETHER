@@ -82,6 +82,41 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Admin UI OIDC sign-in:
+- Added Auth.js v5 (`next-auth@5.0.0-beta.31`) to `ui/admin`. Two
+  modes:
+    - OIDC: when `AUTH_OIDC_ISSUER`, `AUTH_OIDC_CLIENT_ID`,
+      `AUTH_OIDC_CLIENT_SECRET`, and `AUTH_SECRET` are set, every
+      page is gated behind a valid session; unauthenticated users
+      are bounced to the IdP via `/signin`.
+    - Lab bypass: when those env vars are missing, the
+      `authorized` callback short-circuits to `true` and Shell.tsx
+      renders an unmissable yellow "AUTH DISABLED" banner so the
+      running state is obvious.
+- Middleware (`middleware.ts`) protects every route except
+  `/api/auth/*` and `/signin`. The matcher excludes Next.js
+  internals so static assets aren't auth-gated.
+- Sign-in page (`/signin`) renders a single OIDC button in OIDC
+  mode and redirects back to the dashboard in lab mode.
+- Sign-out button in the sidebar of every authenticated page,
+  rendered alongside the logged-in user's email.
+- `error.tsx` no longer wraps its message in `Shell` — Shell is
+  an async server component with server-action sign-out forms,
+  which can't render from inside a client component (the error
+  boundary must be one).
+- Helm chart: new `ui.oidc.*` values block. `issuer` is plain
+  text; `clientId` and `clientSecret` come from a Secret named
+  by `credentialsSecret`; the cookie-signing key comes from a
+  Secret named by `authSecretName`. Optional `scopes` and
+  `publicUrl` (= `AUTH_URL`) for ingress deployments. Lab default
+  leaves all OIDC values empty so no AUTH_* env reaches the pod.
+  Verified by `helm template` with and without OIDC values set.
+- README and audit-retention.md updated: the "Operator UI sign-in
+  / sign-out" row in the audit-event catalogue moves from
+  "(when OIDC lands)" to "via Auth.js (OIDC delegated to your
+  IdP)". SAS-SM gap analysis Personnel / Privileged-access-review
+  row gains a note that admin-UI auth rides the operator's IdP.
+
 Gateway TLS + mTLS for ES2+ (SGP.22 §5.4):
 - New `services/gateway/internal/tlsconf` package centralises the
   listener configuration. Three modes: plain HTTP (lab default),

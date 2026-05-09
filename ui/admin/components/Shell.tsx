@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { auth, oidcEnabled, signOut } from '@/auth';
 
 const NAV = [
   { href: '/', label: 'Dashboard' },
@@ -11,10 +12,13 @@ const NAV = [
   { href: '/about', label: 'About' },
 ];
 
-export function Shell({ children }: { children: ReactNode }) {
+export async function Shell({ children }: { children: ReactNode }) {
+  const session = oidcEnabled ? await auth() : null;
+  const user = session?.user;
+
   return (
     <div className="min-h-screen flex">
-      <aside className="w-64 shrink-0 border-r border-zinc-200 dark:border-zinc-800 p-6">
+      <aside className="w-64 shrink-0 border-r border-zinc-200 dark:border-zinc-800 p-6 flex flex-col">
         <div className="text-lg font-semibold tracking-tight">Aether</div>
         <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 mb-6">
           Open Source RSP — admin
@@ -30,9 +34,37 @@ export function Shell({ children }: { children: ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="mt-10 text-xs text-zinc-500 dark:text-zinc-400">
-          <div>Status: Phase 0/1</div>
-          <div className="mt-1">No auth in lab. Don&apos;t expose this UI.</div>
+
+        <div className="mt-auto pt-10 text-xs text-zinc-500 dark:text-zinc-400">
+          {oidcEnabled && user ? (
+            <div className="border border-zinc-200 dark:border-zinc-800 rounded p-3">
+              <div className="font-medium text-zinc-700 dark:text-zinc-200 truncate">
+                {user.email || user.name || 'signed in'}
+              </div>
+              <form
+                action={async () => {
+                  'use server';
+                  await signOut({ redirectTo: '/signin' });
+                }}
+              >
+                <button
+                  type="submit"
+                  className="mt-2 text-xs text-zinc-500 dark:text-zinc-400 hover:underline"
+                >
+                  Sign out
+                </button>
+              </form>
+            </div>
+          ) : (
+            <div className="border border-amber-300 dark:border-amber-700/60 rounded p-3 bg-amber-50/40 dark:bg-amber-900/10">
+              <div className="font-medium text-amber-800 dark:text-amber-300">
+                AUTH DISABLED
+              </div>
+              <div className="mt-1">
+                Lab mode. No OIDC configured. Don&apos;t expose this UI.
+              </div>
+            </div>
+          )}
         </div>
       </aside>
       <main className="flex-1 p-10 max-w-5xl">{children}</main>

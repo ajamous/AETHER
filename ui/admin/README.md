@@ -11,7 +11,7 @@ The Aether operator console. Next.js 14 (App Router), React 18, Tailwind CSS.
 | Certificates          | Implemented (read-only) | Identity certs with subject/issuer/expiry       |
 | Audit log             | Implemented (read-only) | Last 50 entries with chain integrity status     |
 | About                 | Implemented   |                                                    |
-| OIDC sign-in          | Not started   | Lab build runs without auth                        |
+| OIDC sign-in          | Implemented (Auth.js v5) | Bypass with banner when unconfigured (lab default) |
 | Real-time updates     | Not started   | Refresh-to-update for now                          |
 | Profile activation flow | Not started |                                                    |
 | Cert rotation         | Not started   |                                                    |
@@ -19,8 +19,37 @@ The Aether operator console. Next.js 14 (App Router), React 18, Tailwind CSS.
 | Storybook             | Not started   |                                                    |
 | Accessibility audit   | Not started   | Target: WCAG 2.1 AA                                |
 
-This is a read-only console today. **It has no authentication.** Run it
-only against a lab stack on localhost. Do not expose to a network.
+The console is read-only today. **In lab mode it has no
+authentication** — the Shell renders an unmissable yellow
+"AUTH DISABLED" banner so the running state is obvious. To
+enable OIDC, set the four env vars listed under "OIDC
+configuration" below; auth becomes mandatory and unauthenticated
+requests are bounced to the IdP's sign-in page.
+
+## OIDC configuration
+
+Auth.js v5 handles the OAuth flow. Four env vars enable it:
+
+| Variable                  | Purpose                                              |
+| ------------------------- | ---------------------------------------------------- |
+| `AUTH_OIDC_ISSUER`        | OpenID Connect issuer URL (e.g. `https://idp.example/realms/aether`) |
+| `AUTH_OIDC_CLIENT_ID`     | OAuth client ID issued by your IdP                   |
+| `AUTH_OIDC_CLIENT_SECRET` | OAuth client secret                                  |
+| `AUTH_SECRET`             | Random 32-byte string for cookie signing — `openssl rand -base64 32` |
+
+Optional:
+
+| Variable             | Purpose                                                      |
+| -------------------- | ------------------------------------------------------------ |
+| `AUTH_OIDC_SCOPES`   | OAuth scopes (default `openid profile email`)                |
+| `AUTH_URL`           | The canonical public URL of the UI as the IdP sees it; required when behind an ingress so the redirect URI is correct |
+
+The Helm chart wires these via the `ui.oidc.*` block — see
+[deployments/helm/aether/values.yaml](https://github.com/ajamous/aether/blob/main/deployments/helm/aether/values.yaml).
+
+Sign-out is a button in the sidebar that POSTs to
+`/api/auth/signout`. The signed-out user's email shows in the
+sidebar, so the operator always knows who they are.
 
 ## Running
 

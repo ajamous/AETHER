@@ -85,7 +85,7 @@ versions.
 | Requirement | Aether feature | Operator-supplied control | Evidence |
 | --- | --- | --- | --- |
 | Segregation of duties | RBAC roles in [rbac.md](rbac.md): `aether-operator`, `aether-auditor`, `aether-key-custodian`, `aether-incident-responder` | Map roles to humans; no one holds all four | RBAC manifests, role-assignment record |
-| Privileged access review | RBAC manifests stored in Git | Quarterly review with approver sign-off | Git history of RBAC changes, review minutes |
+| Privileged access review | RBAC manifests stored in Git; admin UI sign-in via Auth.js OIDC delegates identity to operator's IdP, so user provisioning / off-boarding rides existing controls | Quarterly review with approver sign-off; IdP group → role mapping documented | Git history of RBAC changes, review minutes, IdP group export |
 | Least privilege for service accounts | Helm chart creates per-release SA, no cluster-admin | Operator audits cluster-wide SA grants | `kubectl auth can-i --list --as system:serviceaccount:NS:aether` output |
 | Multi-person key custody | [key-ceremony.md](key-ceremony.md) requires two-person quorum | Operator runs the ceremony | Signed ceremony forms |
 | Termination procedure | Out of scope | HR off-boarding tied to RBAC removal | Off-boarding checklist, evidence of timely revocation |

@@ -30,7 +30,7 @@ The audit log captures, at a minimum:
 | Cert rotation                               | `services/certmgr`              |
 | SM-DS event registration / deletion         | `services/smds`                 |
 | eIM device register / deregister / command  | `services/eim`                  |
-| Operator UI sign-in / sign-out              | `ui/admin` (when OIDC lands)    |
+| Operator UI sign-in / sign-out              | `ui/admin` via Auth.js (OIDC delegated to your IdP) |
 | Configuration changes                       | Operator-supplied (Helm history)|
 
 Each event is one row in `audit_entries`:
