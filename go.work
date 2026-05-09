@@ -2,6 +2,6 @@ go 1.22
 
 // Aether Go workspace.
 //
-// Service and shared-library modules will be added as `use` directives
-// once they exist. Keeping this file present from day one means a fresh
-// clone is workspace-aware without manual setup.
+// Service and shared-library modules are added here as they land.
+
+use ./pkg/asn1/sgp22/go

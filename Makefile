@@ -46,14 +46,20 @@ help: ## Show this help.
 ##@ Build and test
 
 .PHONY: build
-build: ## Build all Go services and tools.
+build: ## Build all Go modules in the workspace.
 	$(call require-tool,$(GO),install Go 1.22+ from https://go.dev/dl/)
-	$(GO) build ./...
+	@for d in $$(find . -name go.mod -not -path './vendor/*' -exec dirname {} \;); do \
+	  echo "==> build $$d"; \
+	  (cd "$$d" && $(GO) build ./...) || exit $$?; \
+	done
 
 .PHONY: test
-test: ## Run unit tests.
+test: ## Run unit tests in every Go module.
 	$(call require-tool,$(GO),install Go 1.22+)
-	$(GO) test ./...
+	@for d in $$(find . -name go.mod -not -path './vendor/*' -exec dirname {} \;); do \
+	  echo "==> test $$d"; \
+	  (cd "$$d" && $(GO) test ./...) || exit $$?; \
+	done
 
 .PHONY: lint
 lint: ## Run all linters (Go, JS, YAML).
@@ -75,7 +81,6 @@ gen: gen-asn1 ## Run all code generators.
 
 .PHONY: gen-asn1
 gen-asn1: ## Regenerate ASN.1 bindings for SGP.22 modules.
-	$(call require-tool,$(ASN1C),install asn1c from https://github.com/vlm/asn1c)
 	@echo "==> Regenerating SGP.22 ASN.1 bindings"
 	$(MAKE) -C pkg/asn1/sgp22 gen
 
