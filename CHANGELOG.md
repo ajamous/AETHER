@@ -82,6 +82,41 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Observability instrumentation closes the bundle's pending alerts:
+- New `services/hsm-broker/internal/metrics` package: small
+  dependency-free Prometheus exposition (LatencyHistogram +
+  LabeledCounter) with atomic-bucket concurrency and the standard
+  HSM-call latency layout (5ms/10ms/25ms/50ms/100ms/250ms/500ms/1s/2.5s).
+  3 unit tests including 8-writer × 1000-observation concurrency
+  check.
+- hsm-broker Sign handler now wraps its broker.Sign call with
+  `signLatencySec.Observe(time.Since(start))`. The /metrics
+  endpoint emits `aether_hsm_sign_duration_seconds_bucket`,
+  `_sum`, and `_count`. Drives the previously-pending
+  AetherHSMSignLatencyP99 alert.
+- New `services/gateway/internal/metrics` package mirroring the
+  hsm-broker shape (LabeledCounter only — no histograms needed
+  yet). Counter values pre-registered so the hot path is
+  lock-free; unregistered labels silently dropped.
+- Gateway tlsconf middleware gains an UnauthorizedReporter
+  callback. Each 401 on `/gsma/rsp2/es2plus/*` is tagged with
+  reason ∈ {no_tls, no_client_cert, chain_invalid} so the
+  on-call can route quickly. Reporter stays nil-safe — when
+  no reporter is supplied, the middleware is unchanged.
+- Gateway server now registers an
+  `aether_gateway_es2plus_unauthorized_total{reason}` counter
+  pre-loaded with the three reason values, exposes /metrics
+  (admin path; mTLS gate doesn't apply), and passes itself as
+  the reporter into the middleware.
+- Verified by TestGateway_MTLS_401CounterAdvances: drives 3
+  cert-less ES2+ requests, confirms the counter shows
+  reason="no_client_cert" 3 and the other two reasons stay 0.
+- Bundle README, Status table, reference-aws.md, and CHANGELOG
+  all updated: 11 alerts, all wired to live metrics emitted by
+  Aether services or standard exporters. The bundle moves from
+  Partial to Implemented; only Grafana dashboards remain
+  outstanding.
+
 Observability bundle (`deployments/observability/`):
 - 9 Prometheus alert rules covering audit chain integrity (Sev-1
   on aether_audit_chain_ok=0), audit-metrics scrape failure,

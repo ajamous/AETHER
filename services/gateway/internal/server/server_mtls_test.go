@@ -10,12 +10,14 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -211,6 +213,50 @@ func TestGateway_TLS_NoMTLS_AcceptsAnyClient(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
+	}
+}
+
+func TestGateway_MTLS_401CounterAdvances(t *testing.T) {
+	pki := newLabPKI(t)
+	url, stop := startTLSServer(t, pki, true /* mTLS on */)
+	defer stop()
+
+	// Drive a few rejected requests on the ES2+ surface — no client cert.
+	body := []byte(`{"iccid":"8901234567890123456"}`)
+	for i := 0; i < 3; i++ {
+		resp, err := trustedClient(t, pki, nil).Post(
+			url+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("post %d: %v", i, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("post %d: status = %d, want 401", i, resp.StatusCode)
+		}
+	}
+
+	// /metrics is a non-ES2+ admin path so it stays reachable
+	// without a client cert.
+	resp, err := trustedClient(t, pki, nil).Get(url + "/metrics")
+	if err != nil {
+		t.Fatalf("get metrics: %v", err)
+	}
+	defer resp.Body.Close()
+	body2, _ := io.ReadAll(resp.Body)
+	got := string(body2)
+
+	// Expected: aether_gateway_es2plus_unauthorized_total{reason="no_client_cert"} 3
+	if !strings.Contains(got, `aether_gateway_es2plus_unauthorized_total{reason="no_client_cert"} 3`) {
+		t.Fatalf("counter did not advance to 3 for no_client_cert, got:\n%s", got)
+	}
+	// Other reasons stay at 0.
+	for _, want := range []string{
+		`aether_gateway_es2plus_unauthorized_total{reason="chain_invalid"} 0`,
+		`aether_gateway_es2plus_unauthorized_total{reason="no_tls"} 0`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in /metrics output", want)
+		}
 	}
 }
 

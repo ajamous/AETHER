@@ -16,16 +16,24 @@ import (
 
 	hsmv1 "github.com/ajamous/aether/services/hsm-broker/api/v1"
 	"github.com/ajamous/aether/services/hsm-broker/internal/broker"
+	"github.com/ajamous/aether/services/hsm-broker/internal/metrics"
 )
 
 // Server adapts a broker.Broker over HTTP+JSON.
 type Server struct {
-	b broker.Broker
+	b              broker.Broker
+	signLatencySec *metrics.LatencyHistogram
 }
 
 // New constructs a Server backed by b.
 func New(b broker.Broker) *Server {
-	return &Server{b: b}
+	return &Server{
+		b: b,
+		signLatencySec: metrics.NewLatencyHistogram(
+			"aether_hsm_sign_duration_seconds",
+			"Wall-clock latency of HSM Sign operations from the broker's perspective.",
+		),
+	}
 }
 
 // Routes returns an http.Handler with all endpoints mounted.
@@ -42,12 +50,8 @@ func (s *Server) Routes() http.Handler {
 }
 
 // handleMetrics emits a small text/plain Prometheus exposition.
-// We deliberately don't pull in the prometheus/client_golang
-// dependency yet — every Aether service emits a tiny hand-rolled
-// catalogue today. The deployments/observability/ rules consume
-// these directly; a fuller instrumentation pass (histograms for
-// Sign latency, 401 counters on the gateway) is a focused
-// follow-up.
+// Hand-rolled rather than pulling in client_golang — see
+// internal/metrics/metrics.go for the rationale.
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	hr, err := s.b.Health(r.Context())
 	ready := 0
@@ -63,6 +67,7 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 # TYPE aether_hsm_broker_ready gauge
 aether_hsm_broker_ready{backend=%q} %d
 `, backend, ready)
+	s.signLatencySec.Write(w)
 }
 
 // ListenAndServe runs the HTTP server until ctx is cancelled.
@@ -96,7 +101,9 @@ func (s *Server) handleSign(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	start := time.Now()
 	resp, err := s.b.Sign(r.Context(), &req)
+	s.signLatencySec.Observe(time.Since(start))
 	writeJSON(w, resp, err)
 }
 

@@ -163,16 +163,12 @@ metrics:
   When deploying via Helm, set
   `observability.prometheusOperator.enabled: true` to render
   the CRDs in-cluster.
-- Implemented alerts (9): audit chain integrity broken (Sev-1),
+- Implemented alerts (11): audit chain integrity broken (Sev-1),
   audit metrics scrape failing (Sev-2), cert expiring < 30 days
   (Sev-3) / < 7 days (Sev-2) / expired (Sev-1), service down,
-  service crash-looping, HSM broker unhealthy (Sev-1), Postgres
-  connections exhausted.
-- Pending instrumentation: HSM Sign p99 latency and gateway
-  ES2+ 401 spike — both rules listed in
-  [deployments/observability/README.md](https://github.com/ajamous/aether/tree/main/deployments/observability)
-  §"Pending instrumentation" with the small follow-up patches
-  needed in services/hsm-broker and services/gateway.
+  service crash-looping, HSM broker unhealthy (Sev-1), HSM Sign
+  p99 latency > 250ms (Sev-2), ES2+ 401 spike per reason
+  (Sev-2), Postgres connections exhausted.
 - Grafana dashboard JSON: planned, dependent on having a
   Grafana instance to validate against.
 - CloudWatch Logs Insights queries pre-baked for the audit
