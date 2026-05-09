@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -79,5 +80,68 @@ func TestGateway_ProxyToProfileBuilder(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&out)
 	if len(out["templates"]) != 1 || out["templates"][0] != "lab-mvno" {
 		t.Fatalf("unexpected proxy result: %+v", out)
+	}
+}
+
+// TestGateway_RateLimit_RejectsAfterBurst drives the wired
+// middleware end to end: 3 requests with burst=2 → third gets
+// 429, the rate-limit counter advances, admin paths are not
+// rate-limited, and the counter is exposed on /metrics.
+func TestGateway_RateLimit_RejectsAfterBurst(t *testing.T) {
+	s, _ := New(Config{
+		RateLimitRPS:   0.001, // effectively no refill within the test
+		RateLimitBurst: 2,
+	})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+
+	// Burst: 2 successful, 3rd rejected with 429.
+	for i := 0; i < 2; i++ {
+		body, _ := json.Marshal(DownloadOrderRequest{ICCID: "8900000000000000001"})
+		resp, err := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("call %d: %v", i+1, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("call %d: status = %d, want 200", i+1, resp.StatusCode)
+		}
+	}
+	body, _ := json.Marshal(DownloadOrderRequest{ICCID: "8900000000000000001"})
+	resp, err := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("burst+1: %v", err)
+	}
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("burst+1 status = %d, want 429", resp.StatusCode)
+	}
+	if resp.Header.Get("Retry-After") == "" {
+		t.Error("Retry-After header missing on 429")
+	}
+
+	// Admin path bypasses: many requests stay 200 even after the
+	// public surface is exhausted.
+	for i := 0; i < 10; i++ {
+		r, err := http.Get(srv.URL + "/v1/health")
+		if err != nil {
+			t.Fatalf("admin call %d: %v", i+1, err)
+		}
+		if r.StatusCode != http.StatusOK {
+			t.Fatalf("admin call %d: status = %d, want 200", i+1, r.StatusCode)
+		}
+	}
+
+	// /metrics exposes the rejected counter.
+	mr, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("metrics: %v", err)
+	}
+	defer mr.Body.Close()
+	buf, _ := io.ReadAll(mr.Body)
+	got := string(buf)
+	if !strings.Contains(got, "aether_gateway_ratelimit_rejected_total") {
+		t.Errorf("metrics output missing rate-limit counter:\n%s", got)
+	}
+	if !strings.Contains(got, `class="es2plus"} 1`) {
+		t.Errorf("expected rate-limit counter for es2plus to be 1; got:\n%s", got)
 	}
 }

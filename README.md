@@ -34,14 +34,14 @@ The table below is the source of truth.
 | `services/eim`                | Skeleton      | SGP.32 device registry + per-device command queue, in-memory and Postgres-backed; IPA poll/ack lifecycle tested end to end |
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
 | `services/audit`              | Implemented   | Hash-chained ledger with verify, in-memory and Postgres-backed stores; serializable concurrent appends verified |
-| `services/gateway`            | Partial       | ES2+ shapes + REST proxy + HTTPS + verified-client-cert mTLS on /gsma/rsp2/es2plus/* (path-scoped); OIDC and rate-limit pending |
+| `services/gateway`            | Partial       | ES2+ shapes + REST proxy + HTTPS + verified-client-cert mTLS on /gsma/rsp2/es2plus/* (path-scoped) + per-source-IP token-bucket rate limiter on /gsma/rsp2/* (admin paths bypass); OIDC pending |
 | `ui/admin`                    | Partial       | Next.js 15 read-only console with Auth.js OIDC sign-in (lab bypass with banner when unconfigured); dashboard, templates, certs, SM-DS, eIM, audit |
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
-| Conformance harness (SGP.23)  | Implemented   | `make conformance` runs 40 cases across 8 SGP.23 families; coverage matrix in `tools/conformance/coverage/sgp23.md`; hardware-in-the-loop tests honestly out of scope |
+| Conformance harness (SGP.23)  | Implemented   | `make conformance` runs 41 cases across 8 SGP.23 families; coverage matrix in `tools/conformance/coverage/sgp23.md`; hardware-in-the-loop tests honestly out of scope |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |
 | Helm chart                    | Implemented   | Lab + production install paths; lab cert-init initContainer auto-mints SGP.26-style chain on every pod start |
 | Terraform modules             | Implemented   | AWS (`deployments/terraform/aws/`: VPC + EKS + RDS Multi-AZ + CloudHSM + WORM S3) and GCP (`deployments/terraform/gcp/`: VPC + GKE Autopilot + Cloud SQL regional HA + Cloud HSM key ring + Bucket-Locked GCS) reference deployments. IRSA / Workload Identity binding is a documented manual post-deploy step. Azure not yet started |
-| Observability bundle          | Implemented   | 11 Prometheus alert rules (cert expiry, audit chain integrity, service health, HSM ready + p99 latency, ES2+ 401 spike per reason, Postgres), ServiceMonitor manifests, and three Grafana dashboards (overview, HSM, gateway ES2+) under `deployments/observability/` |
+| Observability bundle          | Implemented   | 12 Prometheus alert rules (cert expiry, audit chain integrity, service health, HSM ready + p99 latency, ES2+ 401 spike per reason, gateway rate-limit, Postgres), ServiceMonitor manifests, and three Grafana dashboards (overview, HSM, gateway ES2+) under `deployments/observability/` |
 | SAS-SM evidence templates     | Implemented   | Gap analysis, key ceremony, RBAC, audit retention, AWS + GCP + on-prem reference deployments, DR runbook, incident response, common audit findings, recertification checklist — all in `docs/sas-sm/` (free, no paid tier) |
 
 "Skeleton" means the service runs, exposes the documented HTTP

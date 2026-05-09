@@ -204,6 +204,33 @@ groups:
             docs/sas-sm/incident-response.md §"Mitigations
             by symptom".
 
+  - name: aether-gateway-ratelimit
+    interval: 60s
+    rules:
+      - alert: AetherGatewayRateLimited
+        # Sustained 429s on /gsma/rsp2/* over 5 minutes — most
+        # likely a misbehaving BSS, but could be active flooding.
+        # Sev-3 because the limiter is doing its job; the on-call
+        # decides whether to raise quota, ban a source at the LB,
+        # or escalate. Counter is labelled by path class
+        # (es2plus / es9plus).
+        expr: |
+          sum by (class) (
+            rate(aether_gateway_ratelimit_rejected_total[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: sev-3
+          aether_component: gateway
+        annotations:
+          summary: Gateway rate-limiter rejecting > 1 req/s on {{ $labels.class }}
+          description: |
+            More than 1 req/s of 429 Too Many Requests responses on
+            /gsma/rsp2/{{ $labels.class }}/ over the last 5 minutes.
+            Either a BSS is misconfigured (raise its budget at the
+            upstream LB) or you're being probed. The limiter is
+            keeping you safe; this alert is informational.
+
   - name: aether-postgres
     interval: 60s
     rules:
