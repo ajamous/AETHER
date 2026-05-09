@@ -222,6 +222,9 @@ inputs, outputs, and the `examples/full` canonical wiring.
 
 ## Cross-references
 
+- [Reference GCP deployment](reference-gcp.md) — same shape on GCP
+- [Reference Azure deployment](reference-azure.md) — same shape on Azure
+- [Reference on-prem deployment](reference-onprem.md) — same shape on-prem
 - [Helm chart](https://github.com/ajamous/aether/tree/main/deployments/helm/aether)
 - [Gap analysis](gap-analysis.md) — what each component satisfies
 - [Key ceremony](key-ceremony.md) — runs against the CloudHSM

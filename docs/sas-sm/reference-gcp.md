@@ -259,6 +259,7 @@ inputs, outputs, and the `examples/full` canonical wiring.
 ## Cross-references
 
 - [Reference AWS deployment](reference-aws.md) — same shape on AWS
+- [Reference Azure deployment](reference-azure.md) — same shape on Azure
 - [Reference on-prem deployment](reference-onprem.md) — same shape on-prem
 - [Helm chart](https://github.com/ajamous/aether/tree/main/deployments/helm/aether)
 - [Gap analysis](gap-analysis.md) — what each component satisfies
