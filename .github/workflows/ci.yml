@@ -213,6 +213,39 @@ jobs:
       - name: lint rules
         run: promtool check rules deployments/observability/prometheus/prometheus-rules.yaml
 
+  grafana-dashboards:
+    name: grafana dashboards JSON lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: jq parse every dashboard
+        run: |
+          shopt -s nullglob
+          fail=0
+          for f in deployments/observability/grafana/dashboards/*.json; do
+            if jq -e . "$f" >/dev/null; then
+              echo "ok: $f"
+            else
+              echo "::error file=$f::invalid JSON"
+              fail=1
+            fi
+          done
+          exit $fail
+      - name: assert UID + title + at least one panel per dashboard
+        run: |
+          shopt -s nullglob
+          fail=0
+          for f in deployments/observability/grafana/dashboards/*.json; do
+            uid=$(jq -r '.uid // empty' "$f")
+            title=$(jq -r '.title // empty' "$f")
+            panels=$(jq -r '.panels | length' "$f")
+            if [ -z "$uid" ] || [ -z "$title" ] || [ "$panels" -lt 1 ]; then
+              echo "::error file=$f::missing uid/title or zero panels (uid=$uid, panels=$panels)"
+              fail=1
+            fi
+          done
+          exit $fail
+
   terraform-validate:
     name: terraform fmt + validate (aws)
     runs-on: ubuntu-latest

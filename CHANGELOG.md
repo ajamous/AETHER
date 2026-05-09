@@ -206,8 +206,44 @@ Observability instrumentation closes the bundle's pending alerts:
 - Bundle README, Status table, reference-aws.md, and CHANGELOG
   all updated: 11 alerts, all wired to live metrics emitted by
   Aether services or standard exporters. The bundle moves from
-  Partial to Implemented; only Grafana dashboards remain
+  Partial to Implemented; only Grafana dashboards remained
   outstanding.
+
+Grafana dashboards (`deployments/observability/grafana/`):
+- Three Grafana 10.x dashboards backed by metrics already
+  emitted on Aether `/metrics` endpoints:
+    aether-overview        — audit chain status, HSM broker
+                              ready, identity cert days-to-expiry
+                              bargauge, unavailable replicas per
+                              service, pod restart rate, Postgres
+                              connection-pool utilisation gauge,
+                              per-service scrape `up` series.
+    aether-hsm             — Sign latency p50/p95/p99 timeseries
+                              with the 250ms SLO threshold drawn,
+                              throughput, broker readiness over
+                              time, full-distribution latency
+                              heatmap.
+    aether-gateway-es2plus — per-reason 401 rate (5m), cumulative
+                              counts, reason mix donut over the
+                              dashboard range.
+- Every panel queries the same metrics the alert rules already
+  use; the panels light up red when the corresponding alert is
+  firing, keeping dashboards and alerts in lock-step.
+- Datasource is parameterised as `${DS_PROMETHEUS}` so adopters
+  pick their Prometheus on import or via provisioning.
+- README documents three import paths (Grafana UI, file
+  provisioner, kube-prometheus-stack ConfigMap with
+  `grafana_dashboard=1` label) and is honest about what's NOT
+  here: a service-map dashboard (no traces yet), capacity
+  planning (depends on retention), and one-panel-per-alert (the
+  rest live in Alertmanager + the runbook).
+- New `grafana-dashboards` job in `.github/workflows/ci.yml`
+  parses every dashboard JSON with `jq` and asserts each has a
+  uid, a title, and at least one panel — schema-level validation
+  is intentionally not in CI because Grafana's dashboard schema
+  is loose and panel-type-specific.
+- Top-level Status row "Observability bundle" tightened: drops
+  the "Grafana dashboards still pending" tail.
 
 Observability bundle (`deployments/observability/`):
 - 9 Prometheus alert rules covering audit chain integrity (Sev-1
