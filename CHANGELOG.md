@@ -544,6 +544,45 @@ Helm chart (`deployments/helm/aether/`):
 - New `helm` job in `.github/workflows/ci.yml` runs `helm lint`
   and renders both lab and production templates on every PR.
 
+Terraform (`deployments/terraform/gcp/`):
+- GCP reference deployment as IaC, symmetric to the AWS module:
+  VPC + private subnet + NAT + 5-second-aggregation Flow Logs,
+  GKE **Autopilot** with private cluster + Workload Identity +
+  Cloud Logging/Monitoring + deletion protection, Cloud SQL
+  Postgres 16 regional HA with CMEK + 35-day backup + PITR +
+  IAM authentication + private-only IP, Cloud HSM via Cloud
+  KMS at `protection_level = HSM` (FIPS 140-2 Level 3) with a
+  90-day rotation period, GCS audit bucket with **Bucket Lock
+  Compliance** mode + CMEK + uniform bucket-level access +
+  public access prevention + lifecycle to Coldline after 90d.
+- GCP service accounts for audit and hsm-broker. Workload
+  Identity binding to the chart's per-service Kubernetes
+  ServiceAccounts (`<release>-aether`) is a documented manual
+  post-deploy step (chart release name isn't known until
+  install time; a future iteration will read it from a data
+  source and wire automatically).
+- Submodule layout under `modules/` (network, iam, gke,
+  cloudsql, cloudhsm, storage); canonical wiring under
+  `examples/full/` with a `next_steps` output that prints the
+  exact `gcloud iam service-accounts add-iam-policy-binding`
+  commands for the operator.
+- Same posture-as-policy stance as the AWS module: regional
+  HA, CMEK, Bucket Lock Compliance, private cluster, Flow
+  Logs are not exposed as variables. Weakening any of those
+  would break the reference-gcp.md / gap-analysis claims.
+- `terraform-validate` CI job now runs as a matrix job over
+  `[aws, gcp]` so both modules stay validate-clean on every PR.
+- README documents what the module does NOT do: Cloud HSM
+  ceremony (manual), Aether deploy itself (Helm chart is
+  separate), IdP, ingress, multi-region active-active (Phase
+  6), enabling GCP APIs (operator does that ahead of apply),
+  and Terraform state backend.
+- Top-level Status row "Terraform modules" updated: AWS + GCP
+  Implemented; Azure not yet started. reference-gcp.md no
+  longer claims the modules are unwritten — points at this
+  directory and surfaces the manual Workload Identity binding
+  + Cloud HSM ceremony as documented post-deploy work.
+
 Terraform (`deployments/terraform/aws/`):
 - AWS reference deployment as IaC: VPC + private/public subnets +
   NAT + Flow Logs (365-day retention), EKS with all five
