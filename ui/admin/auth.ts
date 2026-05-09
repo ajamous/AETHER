@@ -56,6 +56,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (!oidcEnabled) return true;
       return !!session;
     },
+    // Capture the IdP's id_token on first sign-in so we can forward
+    // it as a Bearer credential to the gateway. We deliberately do
+    // NOT capture the access_token: the gateway gates on the user's
+    // ID token (the IdP-signed proof of who's logged in), not on a
+    // separate API access token. Aligning to id_token also keeps
+    // the audit trail single-purpose — every server-to-gateway call
+    // is bound to the originating session.
+    //
+    // The id_token is short-lived (typical IdP lifetimes 1h-24h);
+    // when it expires the gateway returns 401 with reason=expired
+    // and the user is bounced through Auth.js's silent re-auth or
+    // back to the IdP sign-in page. We do not implement a refresh
+    // dance here — the operator console is fine to re-authenticate
+    // once a session.
+    jwt: async ({ token, account }) => {
+      if (account?.id_token) {
+        (token as { idToken?: string }).idToken = account.id_token;
+      }
+      return token;
+    },
+    session: async ({ session, token }) => {
+      const idToken = (token as { idToken?: string }).idToken;
+      if (idToken) {
+        (session as { idToken?: string }).idToken = idToken;
+      }
+      return session;
+    },
   },
   trustHost: true,
 });
