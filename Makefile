@@ -112,6 +112,11 @@ lab-test: ## Run the lab smoke tests against a running stack.
 	$(call require-tool,$(GO),install Go 1.22+)
 	cd test/e2e && $(GO) test -tags=lab ./...
 
+.PHONY: conformance
+conformance: ## Run the SGP.23 conformance suite.
+	$(call require-tool,$(GO),install Go 1.22+)
+	$(GO) run ./tools/conformance/runner
+
 ##@ Documentation
 
 .PHONY: docs-serve

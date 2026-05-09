@@ -82,6 +82,29 @@ Persistence (Phase 1 follow-up):
   brings up a Postgres service container and runs the integration
   tests for all three backends on every PR.
 
+Conformance harness (`tools/conformance/`):
+- New SGP.23 conformance suite scaffolding. The runner aggregates
+  the per-module unit tests Aether already ships into a single
+  invocation, classified by SGP.23 family (ES2+, ES8+, ES9+,
+  ES11/ES12, SGP.32, Audit, Certs, HSM). 40 cases total, all
+  green at landing.
+- `tools/conformance/runner` is a small Go CLI that walks the
+  catalogue, shells out to `go test -count=1 -run <pattern>` per
+  case, classifies results by family, and reports pass/fail with
+  per-family counts. `--list` enumerates the catalogue without
+  running anything; `--family ES9+` filters.
+- `tools/conformance/coverage/sgp23.md` is the section-by-section
+  coverage matrix mapping every SGP.23 test family to the Aether
+  test that covers it, the hardware tests that need a real
+  sysmoEUICC bench, and the explicitly out-of-scope items
+  (LPA conformance, eUICC firmware, HSM physical security).
+- New `make conformance` target. New `conformance` job in
+  `.github/workflows/ci.yml` runs the suite on every PR.
+- README Status table: "Conformance harness (SGP.23)" moves
+  from Not started to Implemented with the explicit caveat
+  that hardware-in-the-loop tests are honestly out of scope
+  pending a CI hardware bench (Phase 6+ investment).
+
 SAS-SM section: GCP and on-prem reference deployments
 - `docs/sas-sm/reference-gcp.md` — full topology mirror of
   reference-aws.md but on Google Cloud: GKE (Autopilot

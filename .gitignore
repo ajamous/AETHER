@@ -55,3 +55,4 @@ Thumbs.db
 coverage.out
 coverage.html
 *.cover
+/tools/conformance/runner/runner
