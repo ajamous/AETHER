@@ -252,7 +252,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cloud: [aws, gcp]
+        cloud: [aws, gcp, azure]
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3

@@ -1,0 +1,13 @@
+# Terraform working files — do not commit.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+
+# The lock file is intentionally excluded here because this is a
+# module, not a root config — the operator's example/full or their
+# own root will produce its own .terraform.lock.hcl on init.
+.terraform.lock.hcl
