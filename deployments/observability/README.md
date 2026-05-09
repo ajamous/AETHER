@@ -11,8 +11,12 @@ cluster:
 - **`prometheus-operator/`** — `PrometheusRule` and
   `ServiceMonitor` CRDs for adopters running
   kube-prometheus-stack or the upstream Prometheus Operator.
+- **`grafana/dashboards/`** — three dashboards (overview, HSM
+  detail, gateway ES2+) backed by the same metrics the alerts
+  use. See `grafana/README.md` for import instructions.
 
-Both forms encode the same alerts. Pick one.
+Pick one alert form (vanilla or Operator). The Grafana
+dashboards are independent and load alongside either.
 
 ## Status
 
@@ -61,9 +65,6 @@ running already.
 
 ## What this bundle does NOT include
 
-- **Grafana dashboards.** Dashboard JSON would be unverifiable
-  without a Grafana instance. The Operations team's bar is "alerts
-  must fire correctly"; visual dashboards are a follow-up.
 - **kube-state-metrics or postgres-exporter setup.** These are
   prerequisites for `AetherServiceDown` and
   `AetherPostgresConnectionsExhausted` respectively. Standard
