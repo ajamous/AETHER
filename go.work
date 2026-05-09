@@ -7,5 +7,6 @@ go 1.24.7
 use (
 	./pkg/asn1/sgp22/go
 	./pkg/crypto
+	./services/certmgr
 	./services/hsm-broker
 )
