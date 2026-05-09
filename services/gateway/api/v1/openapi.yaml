@@ -1,0 +1,597 @@
+openapi: 3.1.0
+info:
+  title: Aether Gateway API
+  version: 0.1.0
+  summary: |
+    HTTP API surface for the Aether SM-DP+ gateway.
+  description: |
+    The Aether gateway exposes two surfaces on a single listener:
+
+    - **`/gsma/rsp2/es2plus/*`** — SGP.22 §5.4 surface used by upstream
+      BSS systems to drive provisioning. Authenticates via mTLS in
+      production (path-scoped); rate-limited by source IP.
+    - **`/v1/*`** — operator-facing admin surface used by the Aether
+      admin UI and operator CLIs. Authenticates via Bearer-token OIDC
+      (RS256 / ES256) in production. `/v1/health` and `/metrics`
+      bypass OIDC unconditionally so kube-probes and Prometheus can
+      scrape unauthenticated.
+
+    The lab Docker Compose stack runs the gateway over plain HTTP with
+    all auth gates disabled. Production deployments enable each gate
+    via the Helm chart's `gateway.tls`, `gateway.rateLimit`, and
+    `gateway.oidc` values — see the chart's README.
+
+    This spec documents the wire shapes the gateway implements today.
+    The ES2+ skeleton handlers accept the SGP.22 message shapes as
+    JSON for development; the SOAP envelope adapter for production
+    ES2+ traffic is a focused follow-up that lives behind the same
+    handlers.
+  contact:
+    name: Aether community
+    url: https://github.com/ajamous/aether
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: http://localhost:8080
+    description: Lab default — plain HTTP, no auth gates
+  - url: https://rsp.your-mvno.example
+    description: Production — HTTPS + mTLS for ES2+, OIDC for /v1/*
+
+# ---- Security schemes -----------------------------------------------------
+
+components:
+  securitySchemes:
+    BearerOIDC:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OIDC ID token (RS256 or ES256). Required on `/v1/*` admin
+        paths in production (gateway flag: `--oidc-issuer` +
+        `--oidc-audience`). `/v1/health` and `/metrics` bypass.
+        Symmetric algorithms (HS\*) are deliberately rejected.
+    ES2PlusMTLS:
+      type: mutualTLS
+      description: |
+        Verified TLS client certificate, chain-validated against the
+        gateway's `--es2plus-client-ca` bundle. Required on
+        `/gsma/rsp2/es2plus/*` in production.
+
+  schemas:
+    Problem:
+      type: object
+      description: |
+        RFC 7807 Problem Details. Returned for all 4xx and 5xx
+        responses on JSON-shaped endpoints.
+      properties:
+        type:
+          type: string
+          format: uri
+          example: about:blank
+        title:
+          type: string
+          example: Bad Request
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: iccid or profile_type required
+      required: [type, title, status]
+
+    Health:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        upstream:
+          type: object
+          additionalProperties:
+            type: string
+      required: [ready]
+
+    DownloadOrderRequest:
+      type: object
+      description: SGP.22 §5.4.1 DownloadOrder.
+      properties:
+        eid:
+          type: string
+          description: 32-hex-character EID per SGP.02 §6.5.1; optional when `profile_type` is set.
+          example: "89049032123451234512345678901234"
+        iccid:
+          type: string
+          description: ICCID to reserve. Optional when `profile_type` is set.
+          example: "8900000000000000001"
+        profile_type:
+          type: string
+          description: Profile type to reserve from inventory.
+      anyOf:
+        - required: [iccid]
+        - required: [profile_type]
+
+    DownloadOrderResponse:
+      type: object
+      properties:
+        iccid:
+          type: string
+      required: [iccid]
+
+    ConfirmOrderRequest:
+      type: object
+      description: SGP.22 §5.4.2 ConfirmOrder.
+      properties:
+        iccid:
+          type: string
+        matching_id:
+          type: string
+        smdp_address:
+          type: string
+      required: [iccid]
+
+    ConfirmOrderResponse:
+      type: object
+      properties:
+        matching_id:
+          type: string
+
+    Templates:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            type: string
+      required: [templates]
+
+    Cert:
+      type: object
+      description: One identity certificate as the certmgr loaded it.
+      properties:
+        name:
+          type: string
+        subject:
+          type: string
+        issuer:
+          type: string
+        not_before:
+          type: string
+          format: date-time
+        not_after:
+          type: string
+          format: date-time
+        days_until_expiry:
+          type: integer
+        serial_number:
+          type: string
+        loaded_at:
+          type: string
+          format: date-time
+      required: [name, subject, issuer, not_before, not_after, days_until_expiry, serial_number, loaded_at]
+
+    SMDSEvent:
+      type: object
+      description: SM-DS pending event (SGP.22 §5.5.1 RegisterEvent shape).
+      properties:
+        eid:
+          type: string
+        event_id:
+          type: string
+        rsp_server_address:
+          type: string
+        forwarding:
+          type: boolean
+        registered_at:
+          type: string
+          format: date-time
+      required: [eid, event_id, rsp_server_address, registered_at]
+
+    SMDSEvents:
+      type: object
+      properties:
+        length:
+          type: integer
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/SMDSEvent"
+
+    IoTDevice:
+      type: object
+      description: SGP.32 eIM-managed device.
+      properties:
+        eid:
+          type: string
+        label:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        registered_at:
+          type: string
+          format: date-time
+        last_seen:
+          type: [string, "null"]
+          format: date-time
+      required: [eid, registered_at]
+
+    IoTDevices:
+      type: object
+      properties:
+        length:
+          type: integer
+        devices:
+          type: array
+          items:
+            $ref: "#/components/schemas/IoTDevice"
+
+    EmptyObject:
+      type: object
+      additionalProperties: true
+
+  responses:
+    Unauthorized:
+      description: |
+        OIDC verification failed. `WWW-Authenticate: Bearer
+        realm="aether-admin"` is set; the per-reason
+        `aether_gateway_admin_unauthorized_total{reason}` counter
+        on `/metrics` advances with reason ∈ `{no_token, malformed,
+        unsupported_alg, unknown_kid, bad_signature, wrong_issuer,
+        wrong_audience, expired, not_yet_valid, jwks_fetch_failed}`.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: 'Bearer realm="aether-admin"'
+
+    TooManyRequests:
+      description: |
+        Per-source-IP rate limit exceeded. `Retry-After: 1` is set;
+        the per-class `aether_gateway_ratelimit_rejected_total{class}`
+        counter on `/metrics` advances.
+      headers:
+        Retry-After:
+          schema:
+            type: string
+            example: "1"
+
+# ---- Paths ----------------------------------------------------------------
+
+paths:
+  /gsma/rsp2/es2plus/downloadOrder:
+    post:
+      summary: SGP.22 §5.4.1 DownloadOrder
+      description: |
+        BSS asks the SM-DP+ to reserve a profile for a given EID
+        (or any EID). Response carries an ICCID.
+      operationId: es2plusDownloadOrder
+      tags: [es2plus]
+      security:
+        - ES2PlusMTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadOrderRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadOrderResponse"
+        "400":
+          description: Bad request (missing iccid AND profile_type, malformed JSON)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: mTLS gate rejected the client cert. `aether_gateway_es2plus_unauthorized_total{reason}` advances.
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /gsma/rsp2/es2plus/confirmOrder:
+    post:
+      summary: SGP.22 §5.4.2 ConfirmOrder
+      operationId: es2plusConfirmOrder
+      tags: [es2plus]
+      security:
+        - ES2PlusMTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmOrderRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmOrderResponse"
+        "400":
+          description: Bad request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: mTLS gate rejected the client cert
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /gsma/rsp2/es2plus/cancelOrder:
+    post:
+      summary: SGP.22 §5.4.3 CancelOrder
+      operationId: es2plusCancelOrder
+      tags: [es2plus]
+      security:
+        - ES2PlusMTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyObject"
+        "401":
+          description: mTLS gate rejected the client cert
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /gsma/rsp2/es2plus/releaseProfile:
+    post:
+      summary: SGP.22 §5.4.4 ReleaseProfile
+      operationId: es2plusReleaseProfile
+      tags: [es2plus]
+      security:
+        - ES2PlusMTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyObject"
+        "401":
+          description: mTLS gate rejected the client cert
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /gsma/rsp2/es2plus/handleNotification:
+    post:
+      summary: SGP.22 §5.4.5 HandleNotification
+      operationId: es2plusHandleNotification
+      tags: [es2plus]
+      security:
+        - ES2PlusMTLS: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmptyObject"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyObject"
+        "401":
+          description: mTLS gate rejected the client cert
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /v1/health:
+    get:
+      summary: Liveness/readiness probe
+      description: |
+        Public; no auth required. Used by Kubernetes liveness +
+        readiness probes. Returns ready=true once upstream URLs are
+        configured.
+      operationId: gatewayHealth
+      tags: [admin]
+      security: []  # explicitly public — bypasses OIDC and rate-limit gates
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "503":
+          description: Service unhealthy
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /v1/templates:
+    get:
+      summary: List profile templates
+      description: Proxies to profile-builder's `/v1/templates`.
+      operationId: listTemplates
+      tags: [admin]
+      security:
+        - BearerOIDC: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Templates"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: profile-builder upstream not configured
+
+  /v1/templates/{name}:
+    get:
+      summary: Inspect one profile template
+      description: Proxies to profile-builder's `/v1/templates/{name}`.
+      operationId: getTemplate
+      tags: [admin]
+      security:
+        - BearerOIDC: []
+      parameters:
+        - in: path
+          name: name
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Template not found
+
+  /v1/certs:
+    get:
+      summary: List loaded identity certificates
+      description: Proxies to certmgr's `/v1/certs`.
+      operationId: listCerts
+      tags: [admin]
+      security:
+        - BearerOIDC: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/trust-store:
+    get:
+      summary: Get the trust store as PEM
+      description: Proxies to certmgr's `/v1/trust-store`. Returns concatenated PEM CA bundle.
+      operationId: getTrustStore
+      tags: [admin]
+      security:
+        - BearerOIDC: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/x-pem-file:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/smds/events:
+    get:
+      summary: List SM-DS pending events
+      description: Proxies to smds's `/v1/events`. Operator-only view of registered events.
+      operationId: listSMDSEvents
+      tags: [admin]
+      security:
+        - BearerOIDC: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SMDSEvents"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/eim/devices:
+    get:
+      summary: List eIM-managed devices
+      description: Proxies to eim's `/v1/devices`.
+      operationId: listIoTDevices
+      tags: [admin]
+      security:
+        - BearerOIDC: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoTDevices"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /v1/openapi.yaml:
+    get:
+      summary: This OpenAPI spec
+      description: |
+        Self-describing endpoint that serves this YAML document.
+        Operators can point a client generator at this URL.
+      operationId: getOpenAPISpec
+      tags: [admin]
+      security: []  # explicitly public — bypasses OIDC so client tooling can discover the API
+      responses:
+        "200":
+          description: OK
+          content:
+            application/yaml:
+              schema:
+                type: string
+        "404":
+          description: Not built with the embedded spec
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: |
+        Public; no auth required. Used by Prometheus scraping.
+        Emits `aether_gateway_es2plus_unauthorized_total{reason}`,
+        `aether_gateway_ratelimit_rejected_total{class}`, and
+        `aether_gateway_admin_unauthorized_total{reason}`.
+      operationId: getMetrics
+      tags: [admin]
+      security: []  # explicitly public — bypasses OIDC so Prometheus can scrape
+      responses:
+        "200":
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+        "503":
+          description: Metrics unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+
+tags:
+  - name: es2plus
+    description: |
+      SGP.22 §5.4 ES2+ surface. mTLS-gated in production.
+  - name: admin
+    description: |
+      Operator-facing admin surface. OIDC-gated in production.
+      `/v1/health` and `/metrics` bypass for kube-probes and Prometheus.

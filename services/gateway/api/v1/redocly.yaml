@@ -1,0 +1,17 @@
+# Redocly lint config for the Aether gateway OpenAPI spec.
+#
+# We turn off the operation-4xx-response recommendation: the
+# affected operations (/v1/health, /metrics) are infrastructure
+# probes that document 5xx responses but not specific 4xx ones,
+# and adding fictional 4xx examples would be worse than the
+# warning.
+
+extends:
+  - recommended
+
+rules:
+  operation-4xx-response: off
+  # localhost is the actual lab listen address — keep it in the
+  # servers list as a documentation aid for adopters running
+  # `make lab-up`.
+  no-server-example.com: off

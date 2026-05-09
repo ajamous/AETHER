@@ -213,6 +213,28 @@ jobs:
       - name: lint rules
         run: promtool check rules deployments/observability/prometheus/prometheus-rules.yaml
 
+  openapi-lint:
+    name: gateway openapi lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: redocly lint
+        working-directory: services/gateway/api/v1
+        run: npx --yes @redocly/cli@1.25.0 lint openapi.yaml --max-problems 0
+      - name: assert spec is embedded in the gateway binary
+        # The Go embed directive copies bytes at build time, so a
+        # successful build of services/gateway/api/v1 is the contract
+        # that proves the file is reachable from the binary.
+        working-directory: services/gateway
+        run: go build ./api/...
+
   grafana-dashboards:
     name: grafana dashboards JSON lint
     runs-on: ubuntu-latest

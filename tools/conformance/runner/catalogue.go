@@ -139,6 +139,18 @@ var catalogue = []Case{
 		Module: "services/gateway", Package: "./internal/oidc/...",
 		RunPattern: "^TestVerify_RejectsTamperedSignature$",
 	},
+	{
+		Family: "Admin",
+		Title:  "OpenAPI spec embedded + served at /v1/openapi.yaml",
+		Module: "services/gateway", Package: "./internal/server/...",
+		RunPattern: "^TestGateway_OpenAPISpec$",
+	},
+	{
+		Family: "Admin",
+		Title:  "OpenAPI endpoint bypasses OIDC for client discovery",
+		Module: "services/gateway", Package: "./internal/server/...",
+		RunPattern: "^TestGateway_OpenAPI_BypassesOIDC$",
+	},
 
 	// -- ES9+ ----------------------------------------------------
 	{

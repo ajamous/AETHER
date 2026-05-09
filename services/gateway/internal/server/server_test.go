@@ -307,3 +307,56 @@ func (i *gwFakeIdP) Mint(t *testing.T, payload map[string]any) string {
 	}
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(sig)
 }
+
+// TestGateway_OpenAPISpec exposes the embedded OpenAPI 3.1 spec
+// at /v1/openapi.yaml. The endpoint bypasses OIDC (operators
+// discover the API before authenticating). Verifies content-type
+// and structural shape (the spec must declare openapi 3.x and
+// contain the gateway's title).
+func TestGateway_OpenAPISpec(t *testing.T) {
+	s, _ := New(Config{})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/openapi.yaml")
+	if err != nil {
+		t.Fatalf("get /v1/openapi.yaml: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "application/yaml") {
+		t.Errorf("Content-Type = %q, want application/yaml...", ct)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	got := string(body)
+	for _, want := range []string{"openapi: 3.", "Aether Gateway API", "/gsma/rsp2/es2plus/downloadOrder", "/v1/templates"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("spec missing %q", want)
+		}
+	}
+}
+
+// TestGateway_OpenAPI_BypassesOIDC confirms /v1/openapi.yaml is
+// reachable without a Bearer when the OIDC gate is enabled —
+// operators and CLI tooling need to discover the API before
+// authenticating.
+func TestGateway_OpenAPI_BypassesOIDC(t *testing.T) {
+	idp := newGatewayFakeIdP(t)
+	v, _ := oidc.Discover(context.Background(), oidc.Config{
+		Issuer:   idp.URL,
+		Audience: "aether-admin",
+	})
+	s, _ := New(Config{OIDCVerifier: v})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/v1/openapi.yaml")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d (must bypass OIDC); want 200", resp.StatusCode)
+	}
+}
