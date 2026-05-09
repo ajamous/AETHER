@@ -19,11 +19,13 @@ import (
 	"strings"
 	"time"
 
+	gatewayv1 "github.com/ajamous/aether/services/gateway/api/v1"
 	"github.com/ajamous/aether/services/gateway/internal/metrics"
 	"github.com/ajamous/aether/services/gateway/internal/oidc"
 	"github.com/ajamous/aether/services/gateway/internal/ratelimit"
 	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
+
 
 type Server struct {
 	profileBuilder string
@@ -147,6 +149,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /v1/trust-store", s.proxy("certmgr", "/v1/trust-store"))
 	mux.HandleFunc("GET /v1/smds/events", s.proxy("smds", "/v1/events"))
 	mux.HandleFunc("GET /v1/eim/devices", s.proxy("eim", "/v1/devices"))
+	mux.HandleFunc("GET /v1/openapi.yaml", s.handleOpenAPI)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
 	// Middleware order: rate limit FIRST, then mTLS gate, then OIDC.
@@ -171,6 +174,16 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	s.es2plusUnauthorized.Write(w)
 	s.rateLimitRejected.Write(w)
 	s.adminUnauthorized.Write(w)
+}
+
+// handleOpenAPI serves the embedded OpenAPI 3.1 spec. /v1/openapi.yaml
+// bypasses the OIDC gate (same shape as /v1/health and /metrics) so
+// operators and CLI tooling can discover the API without first
+// authenticating. The API surface stays gated.
+func (s *Server) handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(gatewayv1.SpecBytes())
 }
 
 // ListenAndServe runs the gateway. If the configured mode includes

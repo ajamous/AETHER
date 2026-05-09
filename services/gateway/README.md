@@ -21,7 +21,7 @@ Aether's API gateway. Single entry point for:
 | OIDC auth on `/v1/*`                             | Implemented (`--oidc-issuer` + `--oidc-audience`); RS256 + ES256, JWKS cache, /v1/health and /metrics bypass; `aether_gateway_admin_unauthorized_total{reason}` on `/metrics` |
 | Rate limiting (per-source token bucket on `/gsma/rsp2/*`) | Implemented (`--rate-limit-rps` + `--rate-limit-burst`); admin paths bypass; `aether_gateway_ratelimit_rejected_total{class}` on `/metrics` drives the AetherGatewayRateLimited alert |
 | RBAC                                             | Not started  |
-| OpenAPI 3 spec generation                        | Not started  |
+| OpenAPI 3 spec                                   | Implemented (`services/gateway/api/v1/openapi.yaml` — embedded via `go:embed`, served at `/v1/openapi.yaml` which bypasses OIDC for client discovery; CI gate via `redocly lint`) |
 
 ## TLS / mTLS
 
@@ -118,6 +118,45 @@ wrong_audience, expired, not_yet_valid, jwks_fetch_failed}`.
 The implementation is stdlib-only on purpose: a third-party JWT
 library would be a non-trivial supply-chain surface for the
 SAS-SM-relevant admin auth gate.
+
+## OpenAPI
+
+The gateway publishes a hand-written OpenAPI 3.1 spec covering the
+ES2+ surface (mTLS-gated) and the `/v1/*` admin surface
+(OIDC-gated). The spec lives at
+[`services/gateway/api/v1/openapi.yaml`](api/v1/openapi.yaml) and
+is embedded into the binary via `go:embed`, so a running gateway
+serves it at:
+
+```
+GET /v1/openapi.yaml
+```
+
+This endpoint **bypasses the OIDC gate** (same shape as
+`/v1/health` and `/metrics`) so operators and CLI tooling can
+discover the API without authenticating first. The API surface
+itself stays gated.
+
+CI lints the spec with [Redocly CLI](https://redocly.com/docs/cli/)
+on every PR (`.github/workflows/ci.yml` → `openapi-lint`). Lint
+config under `services/gateway/api/v1/redocly.yaml` turns off
+two rules that don't fit the SAS-SM use case (the
+`operation-4xx-response` recommendation on infra probes, and
+`no-server-example.com` since `localhost` is the genuine lab
+listen address). Everything else uses Redocly's recommended
+profile.
+
+Generate a client:
+
+```bash
+# Go client
+oapi-codegen -package aetherclient services/gateway/api/v1/openapi.yaml \
+    > internal/aetherclient/client.go
+
+# TypeScript client
+npx openapi-typescript services/gateway/api/v1/openapi.yaml \
+    -o ui/admin/lib/aetherclient.ts
+```
 
 ## Wire format
 

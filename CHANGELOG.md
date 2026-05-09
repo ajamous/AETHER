@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Gateway OpenAPI 3.1 spec (`services/gateway/api/v1/openapi.yaml`):
+- Hand-written OpenAPI 3.1 spec covering both gateway surfaces:
+  `/gsma/rsp2/es2plus/*` (mTLS-gated, SGP.22 §5.4) and `/v1/*`
+  (OIDC-gated admin). Schemas for DownloadOrder, ConfirmOrder,
+  the proxied templates/certs/SM-DS/eIM views, RFC 7807 Problem
+  responses, and the per-reason 401/429 semantics inherited from
+  the existing rate-limit and OIDC middleware. Security schemes
+  capture both auth gates so a generated client gets the right
+  wire shape out of the box.
+- `services/gateway/api/v1/openapi.go` embeds the YAML via
+  `go:embed`. The server registers `GET /v1/openapi.yaml` which
+  bypasses the OIDC gate (same shape as `/v1/health` and
+  `/metrics`) so operators and CLI tooling can discover the API
+  without authenticating first. The API surface itself stays
+  gated.
+- `oidc.shouldEnforce` updated to bypass `/v1/openapi.yaml`
+  alongside `/v1/health`. Server-level test drives the spec
+  endpoint with the OIDC verifier wired in and asserts a 200
+  with no Bearer.
+- `services/gateway/api/v1/redocly.yaml` carries lint config
+  that turns off two rules that don't fit SAS-SM use cases
+  (`operation-4xx-response` on infra probes; `no-server-example.com`
+  since `localhost` is the genuine lab listen address). Everything
+  else follows Redocly's recommended profile.
+- New `openapi-lint` job in `.github/workflows/ci.yml` runs
+  `npx @redocly/cli lint --max-problems 0` on every PR and
+  asserts the embed compiles via `go build ./api/...`.
+- `TestGateway_OpenAPISpec` and
+  `TestGateway_OpenAPI_BypassesOIDC` drive the wired endpoint
+  end-to-end through the routing layer (content-type, structural
+  shape, OIDC bypass). Both added to the conformance harness;
+  52 cases now (was 50).
+- Gateway README gains an "OpenAPI" section with example
+  `oapi-codegen` (Go) and `openapi-typescript` (TypeScript)
+  client-generation invocations.
+
+Status row updates:
+- Gateway README: "OpenAPI 3 spec generation — Not started" →
+  "Implemented".
+- Conformance harness: 50 → 52 cases.
+
 HSM vendor configuration documentation (`docs/sas-sm/hsm-vendors.md`):
 - Resolves a contradiction in the honest-status posture: the
   README claimed "Cloud HSM backends — Not started" while the
