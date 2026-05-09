@@ -35,7 +35,7 @@ The table below is the source of truth.
 | `services/profile-builder`    | Skeleton      | YAML template loader + UPP envelope; SAIP-encoded UPP pending |
 | `services/audit`              | Implemented   | Hash-chained ledger with verify; in-memory store (Postgres backend pending) |
 | `services/gateway`            | Skeleton      | ES2+ shapes + REST proxy to upstream services; OIDC/mTLS/rate-limit pending |
-| `ui/admin`                    | Not started   | Next.js admin console                              |
+| `ui/admin`                    | Skeleton      | Next.js 15 read-only console: dashboard, templates, certs, audit |
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
 | Conformance harness (SGP.23)  | Not started   |                                                    |
 | Cloud HSM backends            | Not started   | AWS, GCP, Azure, Thales Luna, Utimaco              |

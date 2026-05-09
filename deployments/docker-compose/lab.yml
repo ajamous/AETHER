@@ -176,6 +176,20 @@ services:
     ports:
       - "8080:8080"
 
+  admin-ui:
+    build:
+      context: ../..
+      dockerfile: ui/admin/Dockerfile
+    environment:
+      AETHER_GATEWAY_URL: http://gateway:8080
+      AETHER_AUDIT_URL: http://audit:8447
+      AETHER_CERTMGR_URL: http://certmgr:8444
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
 volumes:
   pgdata: {}
   natsdata: {}

@@ -47,10 +47,19 @@ Services (`services/`):
 - `audit`: hash-chained append-only ledger. Append, list, get, verify,
   with tamper detection.
 
+Admin UI (`ui/admin/`):
+- Next.js 15 (App Router), React 18, Tailwind CSS, TypeScript strict.
+- Read-only operator console: dashboard, profile templates,
+  certificates, audit log, about page.
+- Server-side data fetching only — the browser never talks to
+  backend services directly. Helpers in `lib/api.ts`.
+- Standalone-mode build, multi-stage Dockerfile.
+- No authentication today; lab use only.
+
 Lab and tests:
 - Docker Compose at `deployments/docker-compose/lab.yml` brings up
-  Postgres, Redis, NATS, certgen, and all six Aether services with
-  health-gated startup ordering.
+  Postgres, Redis, NATS, certgen, all six Aether services, and the
+  admin UI with health-gated startup ordering.
 - Lab smoke tests at `test/e2e/`, gated by `-tags=lab`, exercise the
   gateway, certmgr metrics, audit chain, and ES2+ download-order
   round trip.

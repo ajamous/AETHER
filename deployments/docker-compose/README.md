@@ -22,6 +22,7 @@ make lab-down    # tear down + remove volumes
 | profile-builder  | 8446  | Profile templates                                    |
 | audit            | 8447  | Hash-chained audit log                               |
 | gateway          | 8080  | ES2+ for BSS, REST for UI; entrypoint                |
+| admin-ui         | 3000  | Next.js operator console (read-only, no auth)        |
 
 ## Smoke test
 
@@ -33,6 +34,8 @@ curl http://localhost:8080/v1/templates
 curl http://localhost:8080/v1/certs
 curl http://localhost:8444/metrics | head -30
 ```
+
+Or open the admin UI in a browser at <http://localhost:3000>.
 
 ## What this is honestly NOT
 

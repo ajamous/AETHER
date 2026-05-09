@@ -82,6 +82,26 @@ jobs:
           args: --timeout=5m
         continue-on-error: true
 
+  ui:
+    name: ui build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ui/admin/package-lock.json
+      - name: install
+        working-directory: ui/admin
+        run: npm ci || npm install
+      - name: typecheck
+        working-directory: ui/admin
+        run: npm run typecheck
+      - name: build
+        working-directory: ui/admin
+        run: npm run build
+
   docs:
     name: docs build
     runs-on: ubuntu-latest
