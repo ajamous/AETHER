@@ -22,7 +22,9 @@ func newTestServer(t *testing.T) *httptest.Server {
 	return httptest.NewServer(s.Routes())
 }
 
-func postJSON(t *testing.T, url string, body any, dst any) *http.Response {
+// postJSON returns (status, contentType). The response body is read,
+// optionally decoded into dst on 2xx, and closed before returning.
+func postJSON(t *testing.T, url string, body any, dst any) (int, string) {
 	t.Helper()
 	buf, err := json.Marshal(body)
 	if err != nil {
@@ -32,12 +34,13 @@ func postJSON(t *testing.T, url string, body any, dst any) *http.Response {
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
+	defer resp.Body.Close()
 	if dst != nil && resp.StatusCode == http.StatusOK {
 		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
 	}
-	return resp
+	return resp.StatusCode, resp.Header.Get("Content-Type")
 }
 
 func TestServer_Health(t *testing.T) {
@@ -47,6 +50,7 @@ func TestServer_Health(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -64,13 +68,13 @@ func TestServer_GenerateAndSign_RoundTrip(t *testing.T) {
 	defer srv.Close()
 
 	var gen hsmv1.GenerateKeyPairResponse
-	resp := postJSON(t, srv.URL+"/v1/generate-key-pair", hsmv1.GenerateKeyPairRequest{
+	status, _ := postJSON(t, srv.URL+"/v1/generate-key-pair", hsmv1.GenerateKeyPairRequest{
 		Label: "DPpb",
 		Kind:  hsmv1.KeyKindECDSA,
 		Curve: hsmv1.CurveP256,
 	}, &gen)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("generate status=%d", resp.StatusCode)
+	if status != http.StatusOK {
+		t.Fatalf("generate status=%d", status)
 	}
 	if gen.Handle.ID == "" {
 		t.Fatal("expected non-empty key id")
@@ -78,13 +82,13 @@ func TestServer_GenerateAndSign_RoundTrip(t *testing.T) {
 
 	digest := sha256.Sum256([]byte("hello"))
 	var sig hsmv1.SignResponse
-	resp = postJSON(t, srv.URL+"/v1/sign", hsmv1.SignRequest{
+	status, _ = postJSON(t, srv.URL+"/v1/sign", hsmv1.SignRequest{
 		KeyID:     gen.Handle.ID,
 		Digest:    digest[:],
 		DigestAlg: hsmv1.HashSHA256,
 	}, &sig)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("sign status=%d", resp.StatusCode)
+	if status != http.StatusOK {
+		t.Fatalf("sign status=%d", status)
 	}
 	if len(sig.SignatureDER) == 0 {
 		t.Fatal("expected non-empty signature")
@@ -96,16 +100,16 @@ func TestServer_Sign_KeyNotFound_404(t *testing.T) {
 	defer srv.Close()
 
 	digest := sha256.Sum256([]byte("hello"))
-	resp := postJSON(t, srv.URL+"/v1/sign", hsmv1.SignRequest{
+	status, ct := postJSON(t, srv.URL+"/v1/sign", hsmv1.SignRequest{
 		KeyID:     "nonexistent",
 		Digest:    digest[:],
 		DigestAlg: hsmv1.HashSHA256,
 	}, nil)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
 	}
-	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/problem+json") {
-		t.Fatalf("Content-Type = %q, want problem+json", resp.Header.Get("Content-Type"))
+	if !strings.HasPrefix(ct, "application/problem+json") {
+		t.Fatalf("Content-Type = %q, want problem+json", ct)
 	}
 }
 
@@ -117,6 +121,7 @@ func TestServer_BadJSON_400(t *testing.T) {
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}

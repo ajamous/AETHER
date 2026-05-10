@@ -24,7 +24,11 @@ func TestGateway_Health(t *testing.T) {
 	s, _ := New(Config{ProfileBuilder: "http://pb", SMDPPlus: "http://smdp", CertMgr: "http://cm"})
 	srv := httptest.NewServer(s.Routes())
 	defer srv.Close()
-	resp, _ := http.Get(srv.URL + "/v1/health")
+	resp, err := http.Get(srv.URL + "/v1/health")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -44,6 +48,7 @@ func TestGateway_DownloadOrder_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -58,7 +63,11 @@ func TestGateway_DownloadOrder_RejectsEmpty(t *testing.T) {
 	s, _ := New(Config{})
 	srv := httptest.NewServer(s.Routes())
 	defer srv.Close()
-	resp, _ := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", strings.NewReader("{}"))
+	resp, err := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", resp.StatusCode)
 	}
@@ -83,6 +92,7 @@ func TestGateway_ProxyToProfileBuilder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -112,8 +122,10 @@ func TestGateway_RateLimit_RejectsAfterBurst(t *testing.T) {
 		if err != nil {
 			t.Fatalf("call %d: %v", i+1, err)
 		}
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("call %d: status = %d, want 200", i+1, resp.StatusCode)
+		status := resp.StatusCode
+		resp.Body.Close()
+		if status != http.StatusOK {
+			t.Fatalf("call %d: status = %d, want 200", i+1, status)
 		}
 	}
 	body, _ := json.Marshal(DownloadOrderRequest{ICCID: "8900000000000000001"})
@@ -121,6 +133,7 @@ func TestGateway_RateLimit_RejectsAfterBurst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("burst+1: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusTooManyRequests {
 		t.Fatalf("burst+1 status = %d, want 429", resp.StatusCode)
 	}
@@ -135,8 +148,10 @@ func TestGateway_RateLimit_RejectsAfterBurst(t *testing.T) {
 		if err != nil {
 			t.Fatalf("admin call %d: %v", i+1, err)
 		}
-		if r.StatusCode != http.StatusOK {
-			t.Fatalf("admin call %d: status = %d, want 200", i+1, r.StatusCode)
+		status := r.StatusCode
+		r.Body.Close()
+		if status != http.StatusOK {
+			t.Fatalf("admin call %d: status = %d, want 200", i+1, status)
 		}
 	}
 
@@ -179,8 +194,10 @@ func TestGateway_OIDC_RejectsAdminWithoutBearer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/v1/health: %v", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("/v1/health status = %d (must bypass OIDC)", resp.StatusCode)
+	healthStatus := resp.StatusCode
+	resp.Body.Close()
+	if healthStatus != http.StatusOK {
+		t.Errorf("/v1/health status = %d (must bypass OIDC)", healthStatus)
 	}
 
 	// /v1/templates without a Bearer is rejected.
@@ -188,6 +205,7 @@ func TestGateway_OIDC_RejectsAdminWithoutBearer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get /v1/templates: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("/v1/templates status = %d, want 401", resp.StatusCode)
 	}
@@ -242,6 +260,7 @@ func TestGateway_OIDC_AcceptsValidBearer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -322,6 +341,7 @@ func TestGateway_OpenAPISpec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get /v1/openapi.yaml: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
@@ -356,6 +376,7 @@ func TestGateway_OpenAPI_BypassesOIDC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d (must bypass OIDC); want 200", resp.StatusCode)
 	}

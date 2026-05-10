@@ -46,6 +46,7 @@ func TestServer_Health(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -68,6 +69,7 @@ func TestServer_ListCerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -87,6 +89,7 @@ func TestServer_GetCert_PEM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -106,9 +109,11 @@ func TestServer_TrustStorePEM_AndIntermediatesPEM(t *testing.T) {
 			t.Fatalf("get %s: %v", path, err)
 		}
 		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
 			t.Fatalf("status %s = %d", path, resp.StatusCode)
 		}
 		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
 		if !strings.HasPrefix(string(body), "-----BEGIN CERTIFICATE-----") {
 			t.Fatalf("%s: expected PEM, got %q", path, string(body[:60]))
 		}
@@ -122,6 +127,7 @@ func TestServer_GetCert_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
@@ -134,6 +140,7 @@ func TestServer_Metrics_Shape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}

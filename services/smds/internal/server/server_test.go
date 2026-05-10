@@ -18,22 +18,27 @@ func newTestServer(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func postJSON(t *testing.T, url string, body any, dst any) *http.Response {
+func postJSON(t *testing.T, url string, body any, dst any) int {
 	t.Helper()
 	buf, _ := json.Marshal(body)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(buf))
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
+	defer resp.Body.Close()
 	if dst != nil && resp.StatusCode == http.StatusOK {
 		_ = json.NewDecoder(resp.Body).Decode(dst)
 	}
-	return resp
+	return resp.StatusCode
 }
 
 func TestSMDS_Health(t *testing.T) {
 	srv := newTestServer(t)
-	resp, _ := http.Get(srv.URL + "/v1/health")
+	resp, err := http.Get(srv.URL + "/v1/health")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -45,14 +50,13 @@ func TestSMDS_FullDiscoveryFlow(t *testing.T) {
 
 	// SM-DP+ side: register a pending event for the LPA's EID.
 	var regResp smdsv1.RegisterEventResponse
-	resp := postJSON(t, srv.URL+"/gsma/rsp2/es12/registerEvent",
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es12/registerEvent",
 		smdsv1.RegisterEventRequest{
 			EID:              eid,
 			RSPServerAddress: "smdp.example",
 			EventID:          "evt-1",
-		}, &regResp)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("register status = %d", resp.StatusCode)
+		}, &regResp); status != http.StatusOK {
+		t.Fatalf("register status = %d", status)
 	}
 	if regResp.EventID != "evt-1" {
 		t.Fatalf("event_id = %q", regResp.EventID)
@@ -60,23 +64,21 @@ func TestSMDS_FullDiscoveryFlow(t *testing.T) {
 
 	// LPA side: authenticate, then poll.
 	var authResp smdsv1.AuthenticateClientResponse
-	resp = postJSON(t, srv.URL+"/gsma/rsp2/es11/authenticateClient",
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es11/authenticateClient",
 		smdsv1.AuthenticateClientRequest{
 			EID:            eid,
 			EUICCChallenge: []byte("challenge"),
-		}, &authResp)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("auth status = %d", resp.StatusCode)
+		}, &authResp); status != http.StatusOK {
+		t.Fatalf("auth status = %d", status)
 	}
 	if authResp.TransactionID == "" {
 		t.Fatal("expected non-empty transaction_id")
 	}
 
 	var getResp smdsv1.GetEventsResponse
-	resp = postJSON(t, srv.URL+"/gsma/rsp2/es11/getEvents",
-		smdsv1.GetEventsRequest{TransactionID: authResp.TransactionID}, &getResp)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("getEvents status = %d", resp.StatusCode)
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es11/getEvents",
+		smdsv1.GetEventsRequest{TransactionID: authResp.TransactionID}, &getResp); status != http.StatusOK {
+		t.Fatalf("getEvents status = %d", status)
 	}
 	if len(getResp.Events) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(getResp.Events))
@@ -86,17 +88,16 @@ func TestSMDS_FullDiscoveryFlow(t *testing.T) {
 	}
 
 	// SM-DP+ deletes the event after delivery.
-	resp = postJSON(t, srv.URL+"/gsma/rsp2/es12/deleteEvent",
-		smdsv1.DeleteEventRequest{EID: eid, EventID: "evt-1"}, nil)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("delete status = %d", resp.StatusCode)
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es12/deleteEvent",
+		smdsv1.DeleteEventRequest{EID: eid, EventID: "evt-1"}, nil); status != http.StatusOK {
+		t.Fatalf("delete status = %d", status)
 	}
 
 	// Polling again returns empty.
-	resp = postJSON(t, srv.URL+"/gsma/rsp2/es11/getEvents",
-		smdsv1.GetEventsRequest{TransactionID: authResp.TransactionID}, &getResp)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("getEvents-2 status = %d", resp.StatusCode)
+	getResp = smdsv1.GetEventsResponse{}
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es11/getEvents",
+		smdsv1.GetEventsRequest{TransactionID: authResp.TransactionID}, &getResp); status != http.StatusOK {
+		t.Fatalf("getEvents-2 status = %d", status)
 	}
 	if len(getResp.Events) != 0 {
 		t.Fatalf("expected 0 events after delete, got %d", len(getResp.Events))
@@ -105,37 +106,33 @@ func TestSMDS_FullDiscoveryFlow(t *testing.T) {
 
 func TestSMDS_RegisterRejectsMissingFields(t *testing.T) {
 	srv := newTestServer(t)
-	resp := postJSON(t, srv.URL+"/gsma/rsp2/es12/registerEvent",
-		smdsv1.RegisterEventRequest{}, nil)
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es12/registerEvent",
+		smdsv1.RegisterEventRequest{}, nil); status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
 	}
 }
 
 func TestSMDS_DeleteUnknownReturns404(t *testing.T) {
 	srv := newTestServer(t)
-	resp := postJSON(t, srv.URL+"/gsma/rsp2/es12/deleteEvent",
-		smdsv1.DeleteEventRequest{EID: "x", EventID: "y"}, nil)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es12/deleteEvent",
+		smdsv1.DeleteEventRequest{EID: "x", EventID: "y"}, nil); status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
 	}
 }
 
 func TestSMDS_GetEventsUnknownTID(t *testing.T) {
 	srv := newTestServer(t)
-	resp := postJSON(t, srv.URL+"/gsma/rsp2/es11/getEvents",
-		smdsv1.GetEventsRequest{TransactionID: "nope"}, nil)
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es11/getEvents",
+		smdsv1.GetEventsRequest{TransactionID: "nope"}, nil); status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
 	}
 }
 
 func TestSMDS_AuthenticateRejectsEmptyChallenge(t *testing.T) {
 	srv := newTestServer(t)
-	resp := postJSON(t, srv.URL+"/gsma/rsp2/es11/authenticateClient",
-		smdsv1.AuthenticateClientRequest{EID: "x"}, nil)
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	if status := postJSON(t, srv.URL+"/gsma/rsp2/es11/authenticateClient",
+		smdsv1.AuthenticateClientRequest{EID: "x"}, nil); status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
 	}
 }
 
@@ -145,7 +142,11 @@ func TestSMDS_AdminListEvents(t *testing.T) {
 		smdsv1.RegisterEventRequest{EID: "a", RSPServerAddress: "x", EventID: "1"}, nil)
 	postJSON(t, srv.URL+"/gsma/rsp2/es12/registerEvent",
 		smdsv1.RegisterEventRequest{EID: "b", RSPServerAddress: "x", EventID: "2"}, nil)
-	resp, _ := http.Get(srv.URL + "/v1/events")
+	resp, err := http.Get(srv.URL + "/v1/events")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
