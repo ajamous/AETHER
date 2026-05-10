@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Conformance coverage matrix refresh
+(`tools/conformance/coverage/sgp23.md`):
+- Closes a doc-vs-catalogue drift gap created by the previous
+  PR. `pkg/saip` shipped 7 new conformance cases in the
+  machine-readable catalogue, but the human-readable coverage
+  matrix didn't have a SAIP section yet.
+- New "SAIP — SGP.22 §B Profile Package codec" section with all
+  9 rows: build/decode round-trip, validation rejections,
+  decode-error rejections, AppendRaw insertion + guards,
+  byte-stable encoding, profile-builder integration, ICCID
+  nibble-swap, plus two explicit "Pending" rows for the richer
+  ProfileElement types (PE-USIM / PE-PinCodes / PE-FileSystem /
+  PE-AKAParameter) and for the full SGP.22 reference profile
+  decode (hardware-bench fixture).
+- Existing rows that referenced "SAIP codec" as a blocking
+  dependency tightened to reflect the actual layered state:
+  - ES8+ "Full ProtectedProfilePackage framing" row: now
+    correctly notes that the UPP layer is in tree via
+    `pkg/saip`; the remaining work is the smdp-plus BPP
+    wrapping (ECKA + KDF + AES-GCM segmentation around the
+    SAIP UPP).
+  - ES9+ "GetBoundProfilePackage (BPP generation)" row: same
+    update, plus the explicit list of what the BPP wrapping
+    needs (InitialiseSecureChannelRequest signed with DPpb).
+  - SGP.32 "IPAd direct profile fetch" row: tightened to
+    reference both the `pkg/saip` ProfileElement catalogue and
+    the smdp-plus BPP wrapping as the explicit dependencies.
+- "How to read this table" intro updated: the "Pending" bucket
+  is now driven by the smdp-plus BPP wrapping or the
+  `pkg/saip` element catalogue continuing to grow, with each
+  row calling out which.
+- New "Updating this matrix" footer notes the machine-readable
+  catalogue lives at `tools/conformance/runner/catalogue.go`
+  and reports the current count (**66 cases across 10
+  families**: ES2+, ES9+, ES8+/Crypto, SAIP, ES11/ES12,
+  SGP.32, Audit, Certs, HSM, Admin). When the two drift, the
+  `go test`-driven catalogue is authoritative.
+
 `pkg/saip` (SGP.22 §B SAIP profile-package codec, minimum-viable subset):
 - Closes the lynchpin Phase 1 dependency identified in the
   remaining-items audit. Three of four open Phase 1 rows
