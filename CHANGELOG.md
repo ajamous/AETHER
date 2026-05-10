@@ -9,6 +9,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+smdp-plus BPP outer-SEQUENCE assembly
+(`services/smdp-plus/internal/bpp/bpp.go`):
+- Closes the **last codec layer** in the BPP critical path.
+  Every ASN.1 piece the SGP.22 §5.7.6 BoundProfilePackage needs
+  now lives in tree:
+  - `ControlRefTemplate` (§H.4): SCP03t setup parameters
+    (keyUsageQualifier=0xC8, keyType=0x88, keyLength=0x10,
+    optional hostId), all APPLICATION-tagged per spec.
+  - `InitialiseSecureChannelRequest` (§5.7.7): the signed
+    preamble — remoteOpId + transactionId +
+    controlRefTemplate + smdpOtpk + smdpSign, with the
+    APPLICATION-N tags the spec mandates.
+  - `AssembleBoundProfilePackage`: hand-rolled TLV builder
+    that wraps `[16] InitialiseSecureChannelRequest` + the
+    `[APPLICATION 24] sequenceOf88` segment list + the
+    mandatory-but-empty `[APPLICATION 26] sequenceOf86` slot
+    inside the outer `[APPLICATION 54]` constructed SEQUENCE.
+- The hand-rolled TLV path (rather than a flat Go struct) is
+  intentional: SGP.22 mixes APPLICATION-class constructed
+  forms with mandatory-empty trailing fields that
+  `encoding/asn1` doesn't express in a single struct. We keep
+  byte-exact control over every tag/length/body.
+- New `SignedInputBytes(transactionID, smdpOtpk, euiccOtpk)`
+  helper exposes the `transactionId ‖ smdpOtpk ‖ euiccOtpk`
+  concatenation that the SM-DP+ MUST sign with its DPpb key
+  per §5.7.7. Auditors looking at this file see exactly what
+  gets signed without reading codec internals.
+- 12 test groups: ISCR DER round-trip, every validate()
+  rejection path (empty/oversized tid, otpk wrong length,
+  empty signature, remoteOpId out of range),
+  SignedInputBytes concatenation correctness, outer-tag
+  shape (verifies the DER starts with `[APPLICATION 54]
+  constructed high-tag-number form`), assemble rejects
+  empty-segments / invalid ISCR, byte-stable assembly across
+  invocations, DER length round-trip across short/long-form
+  boundary, TLV-builder high-tag-number form, short-tag form,
+  and stripTag body preservation.
+- 6 conformance harness cases added. 80 → 86 cases.
+
+Status row updates:
+- `services/smdp-plus`: caveat tightens. Now lists the outer
+  BoundProfilePackage assembly as a current capability. The
+  documented critical-path remainder shrinks to **wiring
+  only** — capture eUICC otPK + generate SM-DP+ ephemeral
+  keypair + sign InitialiseSecureChannelRequest + assemble +
+  wire into `getBoundProfilePackage` handler. No new ASN.1 or
+  crypto remains.
+- Coverage matrix: 6 new ES8+ rows. The
+  `GetBoundProfilePackage` row's "remaining work" updated
+  with the wiring-only summary. 80 → 86 cases.
+
 smdp-plus BPP segmentation
 (`services/smdp-plus/internal/bpp/segment.go`):
 - Closes another layer of the BPP critical path. Previous PR
