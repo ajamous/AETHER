@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+smdp-plus: AuthenticateClient now returns DPpb-signed SmdpSigned2:
+- Wires the SmdpSigned2 codec from the previous PR into the
+  `authenticateClient` HTTP handler. When the new DPpb identity
+  is configured, the response carries SmdpSigned2 + ECDSA-DER
+  signature + DPpb cert that the eUICC verifies before
+  generating its own ephemeral pubkey for the upcoming BPP
+  exchange. Lab default (no DPpb): the fields stay empty so
+  test harnesses without a trust store keep working.
+- New `Config.DPpb *identity.Identity` and
+  `dppbSigningEnabled()` helper. The DPpb identity is a
+  separate `EnsureLabIdentity` keypair (lab) or CI-issued cert
+  (production); separate ceremony lifecycle from DPauth, per
+  the SAS-SM key-ceremony procedure.
+- New `--dppb-label` flag in `cmd/smdp-plus`. Empty label
+  disables; the warning at startup spells out that an eUICC
+  will reject the response if SmdpSigned2 is absent in
+  production.
+- `bppEuiccOtpk` is intentionally omitted in this PR's
+  SmdpSigned2 payload. The eUICC has not yet generated its
+  ephemeral pubkey at AuthenticateClient time; it does so
+  AFTER verifying SmdpSigned2 and returns the otpk inside the
+  PrepareDownloadResponse that GetBoundProfilePackage carries.
+  Re-signing SmdpSigned2 with the otpk filled in is the BPP
+  follow-up's job.
+
+Tests:
+- `TestAuthenticateClient_DPpbSigningEndToEnd` drives a full
+  initiateAuthentication + authenticateClient flow with both
+  DPauth and DPpb identities configured against a fake hsm-
+  broker. Decodes the returned SmdpSigned2 to confirm the
+  transactionId matches what the SM-DP+ issued and ECDSA-
+  verifies the signature against the broker's public key. As
+  close to "an eUICC will accept this" as we get without a
+  hardware bench.
+- `TestAuthenticateClient_NoDPpbLeavesSmdpSigned2Empty`
+  confirms the lab path stays unchanged: when DPpb isn't
+  configured, the response carries no SmdpSigned2 fields.
+- 2 conformance harness cases added; 71 cases total now (was
+  69).
+
+Status row updates:
+- `services/smdp-plus`: caveat refined again. Now lists
+  DPpb-signed SmdpSigned2 on authenticateClient as a current
+  capability. Documented critical-path remainder is now just
+  "BPP wrapping" (capture eUICC otPK from
+  PrepareDownloadResponse + ECKA + KDF + AES-GCM segmentation
+  around the SAIP UPP).
+- Coverage matrix: 2 new ES9+ rows. 69 → 71 cases.
+
 `SmdpSigned2` codec + DPpb sign helper
 (`services/smdp-plus/internal/signing/smdp_signed2.go`):
 - Closes the next layer of the BPP critical path. Earlier PRs

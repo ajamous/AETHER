@@ -58,6 +58,8 @@ internal).
 | SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed) | Automated | `services/smdp-plus/internal/signing/smdp_signed2_test.go::TestSmdpSigned2_RoundTrip*` |
 | SmdpSigned2 validation rejects bad transactionId + bppEuiccOtpk shapes | Automated | `TestSmdpSigned2_ValidationCatches`     |
 | SmdpSigned2 signature verifies end-to-end (DPpb path)   | Automated | `TestSignSmdpSigned2_VerifiesEndToEnd`     |
+| AuthenticateClient returns DPpb-signed SmdpSigned2 (full HTTP-handler flow) | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_DPpbSigningEndToEnd` (drives initiateAuthentication + authenticateClient with both DPauth and DPpb identities, verifies the returned SmdpSigned2 against the broker public key) |
+| AuthenticateClient lab path leaves SmdpSigned2 empty when DPpb absent | Automated | `TestAuthenticateClient_NoDPpbLeavesSmdpSigned2Empty` |
 | HandleNotification                         | Automated | `services/smdp-plus/.../server_test.go::TestHandleNotification_HappyPath` |
 
 ## ES8+ — Application protocol payload
@@ -183,7 +185,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **69 cases across 10 families** (ES2+, ES9+,
+summary. Today: **71 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in

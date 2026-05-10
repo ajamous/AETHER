@@ -197,6 +197,18 @@ var catalogue = []Case{
 	},
 	{
 		Family: "ES9+",
+		Title:  "AuthenticateClient returns DPpb-signed SmdpSigned2; signature verifies end-to-end",
+		Module: "services/smdp-plus", Package: "./internal/server/...",
+		RunPattern: "^TestAuthenticateClient_DPpbSigningEndToEnd$",
+	},
+	{
+		Family: "ES9+",
+		Title:  "AuthenticateClient lab path leaves SmdpSigned2 fields empty when DPpb absent",
+		Module: "services/smdp-plus", Package: "./internal/server/...",
+		RunPattern: "^TestAuthenticateClient_NoDPpbLeavesSmdpSigned2Empty$",
+	},
+	{
+		Family: "ES9+",
 		Title:  "InitiateAuthentication signature verifies end-to-end",
 		Module: "services/smdp-plus", Package: "./internal/server/...",
 		RunPattern: "^TestInitiateAuthentication_SignatureVerifies$",
