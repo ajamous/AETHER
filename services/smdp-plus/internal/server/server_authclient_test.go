@@ -388,7 +388,10 @@ func TestAuthenticateClient_DPpbSigningEndToEnd(t *testing.T) {
 		EUICCChallenge: euiccChallenge,
 		SMDPAddress:    "aether.local",
 	})
-	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("initiate post: %v", err)
+	}
 	var initOut smdpv1.InitiateAuthenticationResponse
 	json.NewDecoder(resp.Body).Decode(&initOut)
 	resp.Body.Close()
@@ -470,7 +473,10 @@ func TestAuthenticateClient_NoDPpbLeavesSmdpSigned2Empty(t *testing.T) {
 		EuiccCertDER:    leafDER,
 		EumCertDER:      eumDER,
 	})
-	resp, _ := http.Post(url+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(url+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("authenticateClient post: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
@@ -541,7 +547,10 @@ func TestGetBoundProfilePackage_HappyPath(t *testing.T) {
 		EUICCChallenge: euiccChallenge,
 		SMDPAddress:    "aether.local",
 	})
-	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("initiate post: %v", err)
+	}
 	var initOut smdpv1.InitiateAuthenticationResponse
 	json.NewDecoder(resp.Body).Decode(&initOut)
 	resp.Body.Close()
@@ -558,7 +567,7 @@ func TestGetBoundProfilePackage_HappyPath(t *testing.T) {
 		EuiccCertDER:    leafDER,
 		EumCertDER:      eumDER,
 	})
-	resp, err := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	resp, err = http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
 	if err != nil {
 		t.Fatalf("authenticateClient: %v", err)
 	}
@@ -629,12 +638,18 @@ func TestGetBoundProfilePackage_RejectsMissingEuiccOtpk(t *testing.T) {
 		EuiccCertDER:    leafDER,
 		EumCertDER:      eumDER,
 	})
-	resp, _ := http.Post(url+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	resp, err := http.Post(url+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	if err != nil {
+		t.Fatalf("authenticateClient post: %v", err)
+	}
 	resp.Body.Close()
 
 	// Missing euicc_otpk.
 	body, _ := json.Marshal(smdpv1.GetBoundProfilePackageRequest{TransactionID: hexEncode(txid)})
-	resp, _ = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	resp, err = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("getBoundProfilePackage post (missing otpk): %v", err)
+	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing otpk status = %d, want 400", resp.StatusCode)
 	}
@@ -645,7 +660,10 @@ func TestGetBoundProfilePackage_RejectsMissingEuiccOtpk(t *testing.T) {
 		TransactionID: hexEncode(txid),
 		EUICCOtpk:     []byte{0x04, 0x01, 0x02},
 	})
-	resp, _ = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	resp, err = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("getBoundProfilePackage post (malformed otpk): %v", err)
+	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("malformed otpk status = %d, want 400", resp.StatusCode)
 	}
@@ -658,7 +676,10 @@ func TestGetBoundProfilePackage_RejectsMissingEuiccOtpk(t *testing.T) {
 		TransactionID: hexEncode(txid),
 		EUICCOtpk:     bad,
 	})
-	resp, _ = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	resp, err = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("getBoundProfilePackage post (wrong first byte): %v", err)
+	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("wrong-first-byte otpk status = %d, want 400", resp.StatusCode)
 	}
@@ -714,7 +735,10 @@ func newAuthcheckSrvWithDPpb(t *testing.T, chain *labChain) (smdpURL string, txi
 		EUICCChallenge: euiccChallenge,
 		SMDPAddress:    "aether.local",
 	})
-	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("initiate post: %v", err)
+	}
 	var initOut smdpv1.InitiateAuthenticationResponse
 	json.NewDecoder(resp.Body).Decode(&initOut)
 	resp.Body.Close()

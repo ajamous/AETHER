@@ -159,7 +159,11 @@ func TestInitiateAuthentication_NoSigningWhenDisabled(t *testing.T) {
 		EUICCChallenge: bytes.Repeat([]byte{0xAB}, 16),
 		SMDPAddress:    "aether.local",
 	})
-	resp, _ := http.Post(srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
