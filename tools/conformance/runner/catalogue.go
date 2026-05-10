@@ -343,6 +343,42 @@ var catalogue = []Case{
 	},
 	{
 		Family: "ES8+",
+		Title:  "BPP InitialiseSecureChannelRequest DER round-trip",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestISCR_RoundTrip$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP InitialiseSecureChannelRequest validation rejects malformed shapes",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestISCR_Validation$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP outer SEQUENCE assembly: [APPLICATION 54] tag, byte-stable",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestAssembleBoundProfilePackage_(OuterTag|StableAcrossInvocations)$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP outer SEQUENCE assembly rejects empty segments / invalid ISCR",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestAssembleBoundProfilePackage_(NoSegmentsRejected|InvalidISCRRejected)$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP DPpb signed-input bytes match SGP.22 §5.7.7 concatenation",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestSignedInputBytes_Concatenation$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP TLV helpers: DER length round-trip + high/short-form tag encoding",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestDERLength_RoundTrip|TestWrapTLV_|TestStripTag_",
+	},
+	{
+		Family: "ES8+",
 		Title:  "ECDSA P-256 sign + verify round-trip",
 		Module: "pkg/crypto", Package: "./ecdsa/...",
 		RunPattern: "^TestSignVerifyP256_RoundTrip$",

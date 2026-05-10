@@ -54,7 +54,7 @@ internal).
 | EuiccSigned1 chain validation              | Automated | `services/smdp-plus/internal/signing/euicc_test.go::TestVerify_HappyPath` plus 4 negative cases |
 | EuiccSigned1 server-challenge replay defense | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsWrongServerChallenge` |
 | EuiccSigned1 unknown CI rejection          | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsEUICCFromUnknownCI` |
-| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). The SAIP UPP, DPpb-signed SmdpSigned2, §H.3 session-key derivation, and AES-128-GCM segmentation with MAC chaining all ship today (see ES8+ rows above). Remaining work for the handler itself is the `prepareDownload` HTTP shape that captures the eUICC's otPK from the LPA's PrepareDownloadResponse + the outer BoundProfilePackage SEQUENCE assembly + InitialiseSecureChannelRequest |
+| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). Every BPP codec layer ships in `services/smdp-plus/internal/bpp`: ProfileHeader UPP (`pkg/saip`), DPpb-signed SmdpSigned2 (§5.7.14), §H.3 session-key derivation, AES-128-GCM segmentation with MAC chaining, outer BoundProfilePackage (§5.7.6) SEQUENCE with InitialiseSecureChannelRequest (§5.7.7). Remaining work is **wiring** — capture eUICC otPK from the LPA's PrepareDownloadResponse, generate SM-DP+ ephemeral keypair, sign InitialiseSecureChannelRequest with DPpb, assemble. Per-segment AAD layout (counters, ICV framing) is hardware-bench follow-up |
 | SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed) | Automated | `services/smdp-plus/internal/signing/smdp_signed2_test.go::TestSmdpSigned2_RoundTrip*` |
 | SmdpSigned2 validation rejects bad transactionId + bppEuiccOtpk shapes | Automated | `TestSmdpSigned2_ValidationCatches`     |
 | SmdpSigned2 signature verifies end-to-end (DPpb path)   | Automated | `TestSignSmdpSigned2_VerifiesEndToEnd`     |
@@ -79,7 +79,13 @@ internal).
 | BPP segmentation tamper detection (ciphertext + tag) | Automated | `TestOpenSegments_DetectsTamperedCiphertext`, `TestOpenSegments_DetectsTamperedTag` |
 | BPP segmentation chain break / reorder rejected | Automated | `TestOpenSegments_DetectsBrokenChain` (catches segment permutation — replay defense via MCV chain) |
 | BPP segmentation: per-segment nonce uniqueness  | Automated | `TestSealSegments_CountersAreUnique` (catches the AES-GCM nonce-reuse footgun) |
-| Full ProtectedProfilePackage framing       | Pending   | Three of four PPP layers now ship: SAIP UPP via `pkg/saip`, session-key derivation + AES-128-GCM segmentation via `services/smdp-plus/internal/bpp`. Remaining work is the `prepareDownload` HTTP handler + the spec-precise per-segment AAD layout (counters, ICV framing) that the hardware bench (sysmoEUICC1-C2T) will catch — the in-tree segmenter today rounds-trips against itself; cross-vendor interop is honestly out of scope until the bench lands |
+| BPP InitialiseSecureChannelRequest (§5.7.7) DER round-trip | Automated | `services/smdp-plus/internal/bpp/bpp_test.go::TestISCR_RoundTrip` |
+| BPP InitialiseSecureChannelRequest validation rejects malformed shapes | Automated | `TestISCR_Validation` (subtests: empty/oversized tid, otpk wrong length, empty signature, remoteOpId out of range) |
+| BPP outer `[APPLICATION 54]` SEQUENCE assembly + byte-stability | Automated | `TestAssembleBoundProfilePackage_OuterTag`, `TestAssembleBoundProfilePackage_StableAcrossInvocations` |
+| BPP outer assembly rejects empty segments / invalid ISCR | Automated | `TestAssembleBoundProfilePackage_NoSegmentsRejected`, `TestAssembleBoundProfilePackage_InvalidISCRRejected` |
+| BPP DPpb signed-input bytes match §5.7.7 concatenation | Automated | `TestSignedInputBytes_Concatenation` (transactionId ‖ smdpOtpk ‖ euiccOtpk — the exact pre-hash input the DPpb key signs) |
+| BPP TLV helpers: DER length, high/short-form tags, body preservation | Automated | `TestDERLength_RoundTrip`, `TestWrapTLV_*`, `TestStripTag_*` |
+| Full ProtectedProfilePackage framing       | Pending   | Every BPP codec layer ships today: SAIP UPP via `pkg/saip`, session-key derivation + AES-128-GCM segmentation + outer SEQUENCE assembly with InitialiseSecureChannelRequest via `services/smdp-plus/internal/bpp`. Remaining work for `getBoundProfilePackage` is **wiring**: capture eUICC otPK from PrepareDownloadResponse + generate SM-DP+ ephemeral keypair + sign InitialiseSecureChannelRequest with DPpb + assemble. Spec-precise per-segment AAD layout (counters, ICV framing) is honestly hardware-bench follow-up |
 
 ## ES11 / ES12 — SM-DS
 
@@ -193,7 +199,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **80 cases across 10 families** (ES2+, ES9+,
+summary. Today: **86 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in
