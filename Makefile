@@ -56,7 +56,7 @@ build: ## Build all Go modules in the workspace.
 .PHONY: test
 test: ## Run unit tests in every Go module.
 	$(call require-tool,$(GO),install Go 1.25.10+)
-	@for d in $$(find . -name go.mod -not -path './vendor/*' -exec dirname {} \;); do \
+	@for d in $$(find . -name go.mod -not -path './vendor/*' -not -path './test/e2e/*' -exec dirname {} \;); do \
 	  echo "==> test $$d"; \
 	  (cd "$$d" && $(GO) test ./...) || exit $$?; \
 	done

@@ -120,7 +120,11 @@ func TestHandleNotification_HappyPath(t *testing.T) {
 
 func TestHealth(t *testing.T) {
 	srv, _ := newTestServer(t)
-	resp, _ := http.Get(srv.URL + "/v1/health")
+	resp, err := http.Get(srv.URL + "/v1/health")
+	if err != nil {
+		t.Fatalf("get health: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}

@@ -1,35 +1,26 @@
-# golangci-lint configuration for Aether.
+# golangci-lint v2 configuration for Aether.
 #
 # Strict by intent. Code that handles cryptographic material, ASN.1
 # decoding, and protocol state machines benefits from aggressive linting.
-
+version: "2"
 run:
-  timeout: 5m
   tests: true
-
 linters:
-  disable-all: true
+  default: none
   enable:
-    - errcheck
-    - gosimple
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
     - asasalint
     - asciicheck
     - bidichk
     - bodyclose
     - contextcheck
     - durationcheck
+    - errcheck
     - errorlint
     - exhaustive
-    - exportloopref
     - gocritic
-    - gofmt
-    - goimports
     - gosec
+    - govet
+    - ineffassign
     - misspell
     - nakedret
     - nilerr
@@ -39,32 +30,54 @@ linters:
     - revive
     - rowserrcheck
     - sqlclosecheck
+    - staticcheck
     - tparallel
     - unconvert
     - unparam
+    - unused
     - wastedassign
     - whitespace
-
-linters-settings:
-  goimports:
-    local-prefixes: github.com/ajamous/aether
-  gosec:
-    excludes:
-      # G104 (errcheck) is already enforced by errcheck; avoid duplicate noise.
-      - G104
-  revive:
+  settings:
+    gosec:
+      excludes:
+        - G104
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - checkPrivateReceivers
+            - disableStutteringCheck
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: exported
-        arguments:
-          - "checkPrivateReceivers"
-          - "disableStutteringCheck"
-
+      - linters:
+          - errcheck
+          - gosec
+          - unparam
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gosec
-        - errcheck
-        - unparam
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/ajamous/aether
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
