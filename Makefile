@@ -47,7 +47,7 @@ help: ## Show this help.
 
 .PHONY: build
 build: ## Build all Go modules in the workspace.
-	$(call require-tool,$(GO),install Go 1.22+ from https://go.dev/dl/)
+	$(call require-tool,$(GO),install Go 1.25.10+ from https://go.dev/dl/)
 	@for d in $$(find . -name go.mod -not -path './vendor/*' -exec dirname {} \;); do \
 	  echo "==> build $$d"; \
 	  (cd "$$d" && $(GO) build ./...) || exit $$?; \
@@ -55,7 +55,7 @@ build: ## Build all Go modules in the workspace.
 
 .PHONY: test
 test: ## Run unit tests in every Go module.
-	$(call require-tool,$(GO),install Go 1.22+)
+	$(call require-tool,$(GO),install Go 1.25.10+)
 	@for d in $$(find . -name go.mod -not -path './vendor/*' -exec dirname {} \;); do \
 	  echo "==> test $$d"; \
 	  (cd "$$d" && $(GO) test ./...) || exit $$?; \
@@ -66,9 +66,24 @@ lint: ## Run all linters (Go, JS, YAML).
 	$(call require-tool,golangci-lint,go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
 	golangci-lint run ./...
 
+.PHONY: govulncheck
+govulncheck: ## Scan every Go module for reachable known-vulnerability call paths.
+	$(call require-tool,govulncheck,go install golang.org/x/vuln/cmd/govulncheck@latest)
+	@fail=0; \
+	for d in $$(find . -name go.mod -not -path './vendor/*' -not -path './ui/admin/node_modules/*' -exec dirname {} \;); do \
+	  echo "==> govulncheck $$d"; \
+	  out=$$(cd "$$d" && govulncheck ./... 2>&1) || rc=$$?; \
+	  rc=$${rc:-0}; \
+	  if [ $$rc -ne 0 ] && ! echo "$$out" | grep -qE 'no packages|matched no'; then \
+	    echo "$$out"; fail=1; \
+	  fi; \
+	  unset rc; \
+	done; \
+	exit $$fail
+
 .PHONY: tidy
 tidy: ## Tidy Go modules across the workspace.
-	$(call require-tool,$(GO),install Go 1.22+)
+	$(call require-tool,$(GO),install Go 1.25.10+)
 	$(GO) work sync || true
 	for d in $$(find . -name go.mod -not -path './vendor/*' -exec dirname {} \;); do \
 	  (cd "$$d" && $(GO) mod tidy); \
@@ -109,17 +124,17 @@ lab-logs: ## Tail logs from the local lab stack.
 
 .PHONY: lab-test
 lab-test: ## Run the lab smoke tests against a running stack.
-	$(call require-tool,$(GO),install Go 1.22+)
+	$(call require-tool,$(GO),install Go 1.25.10+)
 	cd test/e2e && $(GO) test -tags=lab ./...
 
 .PHONY: conformance
 conformance: ## Run the SGP.23 conformance suite.
-	$(call require-tool,$(GO),install Go 1.22+)
+	$(call require-tool,$(GO),install Go 1.25.10+)
 	$(GO) run ./tools/conformance/runner
 
 .PHONY: verify-anchor
 verify-anchor: ## Build the audit-anchor verifier CLI to bin/aether-verify-anchor.
-	$(call require-tool,$(GO),install Go 1.22+)
+	$(call require-tool,$(GO),install Go 1.25.10+)
 	mkdir -p bin
 	cd tools/aether-verify-anchor && $(GO) build -o ../../bin/aether-verify-anchor .
 

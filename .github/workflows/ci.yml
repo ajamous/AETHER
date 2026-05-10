@@ -95,6 +95,54 @@ jobs:
           args: --timeout=5m
         continue-on-error: true
 
+  govulncheck:
+    name: govulncheck (per module)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+      - name: install govulncheck
+        # Pinned major version so a backward-incompatible CLI
+        # change can't silently flip the scanner's behaviour. We
+        # follow the upstream `latest` floating tag deliberately
+        # within the v1.x series so the CVE database stays fresh.
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: scan every Go module
+        # Workspace mode: ./... from the repo root doesn't expand
+        # across go.mod boundaries. Iterate per module, mirror the
+        # exact pattern the build/test job uses.
+        #
+        # govulncheck does call-graph analysis: it only reports
+        # vulnerabilities in code paths the program actually
+        # reaches. That keeps the false-positive rate low compared
+        # to a naive lockfile scan.
+        #
+        # Exit codes: 0 = clean, 3 = vulnerabilities found. We
+        # fail the job on 3 and tolerate the "no packages
+        # matched" case for modules whose only files are behind a
+        # build tag (e.g. test/e2e under `//go:build lab`). Note:
+        # govulncheck phrases this as `no packages matched`, while
+        # `go build`/`go test` say `matched no packages`. We grep
+        # for `no packages` to catch both forms.
+        run: |
+          fail=0
+          for d in $(find . -name go.mod -not -path './vendor/*' -not -path './ui/admin/node_modules/*' -exec dirname {} \;); do
+            echo "==> govulncheck $d"
+            out=$(cd "$d" && govulncheck ./... 2>&1) || rc=$?
+            rc=${rc:-0}
+            if [ $rc -ne 0 ] && ! echo "$out" | grep -qE 'no packages|matched no'; then
+              echo "$out"
+              fail=1
+            else
+              echo "$out" | head -5
+            fi
+            unset rc
+          done
+          exit $fail
+
   postgres-integration:
     name: postgres persistence integration
     runs-on: ubuntu-latest
