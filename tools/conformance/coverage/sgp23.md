@@ -54,7 +54,7 @@ internal).
 | EuiccSigned1 chain validation              | Automated | `services/smdp-plus/internal/signing/euicc_test.go::TestVerify_HappyPath` plus 4 negative cases |
 | EuiccSigned1 server-challenge replay defense | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsWrongServerChallenge` |
 | EuiccSigned1 unknown CI rejection          | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsEUICCFromUnknownCI` |
-| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). Three of the four BPP layers now ship: the SAIP UPP via `pkg/saip`, the DPpb signing via `SmdpSigned2` (§5.7.14), and the §H.3 session-key derivation via `services/smdp-plus/internal/bpp.Derive` (see ES8+ rows above). Remaining work is the `prepareDownload` HTTP handler + AES-128-GCM segmentation around the SAIP UPP + InitialiseSecureChannelRequest assembly |
+| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). The SAIP UPP, DPpb-signed SmdpSigned2, §H.3 session-key derivation, and AES-128-GCM segmentation with MAC chaining all ship today (see ES8+ rows above). Remaining work for the handler itself is the `prepareDownload` HTTP shape that captures the eUICC's otPK from the LPA's PrepareDownloadResponse + the outer BoundProfilePackage SEQUENCE assembly + InitialiseSecureChannelRequest |
 | SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed) | Automated | `services/smdp-plus/internal/signing/smdp_signed2_test.go::TestSmdpSigned2_RoundTrip*` |
 | SmdpSigned2 validation rejects bad transactionId + bppEuiccOtpk shapes | Automated | `TestSmdpSigned2_ValidationCatches`     |
 | SmdpSigned2 signature verifies end-to-end (DPpb path)   | Automated | `TestSignSmdpSigned2_VerifiesEndToEnd`     |
@@ -75,7 +75,11 @@ internal).
 | BPP session keys: distinct slices + spec lengths | Automated | `TestDerive_SliceLengths`, `TestDerive_DistinctSlices`     |
 | BPP session keys: sharedInfo binds derivation (replay defense) | Automated | `TestDerive_DifferentSharedInfoDifferentKeys` |
 | BPP session keys: deterministic for the same inputs | Automated | `TestDerive_StableAcrossInvocations`     |
-| Full ProtectedProfilePackage framing       | Pending   | The session-key derivation step now lands via `services/smdp-plus/internal/bpp` (rows above). The UPP layer lands via `pkg/saip`. Remaining work for full PPP framing is the AES-128-GCM per-segment seal + MAC chaining + the `prepareDownload` HTTP handler that captures the eUICC's otPK from the LPA's PrepareDownloadResponse |
+| BPP segmentation round-trip + ECKA-derived end to end | Automated | `services/smdp-plus/internal/bpp/segment_test.go::TestSealSegments_RoundTrip` and `TestSealSegments_BothSidesAgreeFromECKA` |
+| BPP segmentation tamper detection (ciphertext + tag) | Automated | `TestOpenSegments_DetectsTamperedCiphertext`, `TestOpenSegments_DetectsTamperedTag` |
+| BPP segmentation chain break / reorder rejected | Automated | `TestOpenSegments_DetectsBrokenChain` (catches segment permutation — replay defense via MCV chain) |
+| BPP segmentation: per-segment nonce uniqueness  | Automated | `TestSealSegments_CountersAreUnique` (catches the AES-GCM nonce-reuse footgun) |
+| Full ProtectedProfilePackage framing       | Pending   | Three of four PPP layers now ship: SAIP UPP via `pkg/saip`, session-key derivation + AES-128-GCM segmentation via `services/smdp-plus/internal/bpp`. Remaining work is the `prepareDownload` HTTP handler + the spec-precise per-segment AAD layout (counters, ICV framing) that the hardware bench (sysmoEUICC1-C2T) will catch — the in-tree segmenter today rounds-trips against itself; cross-vendor interop is honestly out of scope until the bench lands |
 
 ## ES11 / ES12 — SM-DS
 
@@ -189,7 +193,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **75 cases across 10 families** (ES2+, ES9+,
+summary. Today: **80 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in

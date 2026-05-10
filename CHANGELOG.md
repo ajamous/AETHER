@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+smdp-plus BPP segmentation
+(`services/smdp-plus/internal/bpp/segment.go`):
+- Closes another layer of the BPP critical path. Previous PR
+  shipped `Derive` (ECKA + KDF → SENC/SMAC/MCV); this PR ships
+  `SealSegments` and `OpenSegments` — AES-128-GCM seal/open of
+  arbitrary plaintext into MAC-chained ciphertext segments
+  matching SCP03t's shape.
+- `SealSegments(keys, plaintext, segmentSize)` chunks plaintext
+  into ≤1024-byte segments, AES-128-GCM-seals each under
+  `keys.SENC`, and chains the previous segment's GCM tag into
+  the next segment's AAD via `keys.InitialMCV`. Per-segment
+  nonces are deterministic (counter starts at 1, increments
+  per segment) — SCP03t-style; freshness comes from the per-
+  session SENC, not from random nonces.
+- `OpenSegments` reverses the operation under the same keys.
+  Tamper-or-reorder detection is automatic: any failed GCM
+  authentication or a broken MCV chain returns an error and
+  no plaintext bytes (SCP03t treats partial decrypt as fatal).
+- Spec-precise per-segment AAD framing (counter encoding,
+  ICV-as-AAD layout from SGP.22 §H.3) is the explicit follow-
+  up. Today's segmenter is shape-correct and round-trips
+  against itself; cross-vendor interop with a real eUICC waits
+  on the hardware bench. The package godoc spells this out.
+- 9 test groups: round-trip across multiple segment sizes,
+  end-to-end with ECKA-derived keys (both halves of a fresh
+  agreement open each other's seals), tamper detection on
+  ciphertext and on tag, segment-reorder rejection (the MCV
+  chain catches permutation — replay defense), validation of
+  every malformed input (nil keys, short SENC, short MCV,
+  zero/oversized segment size, empty plaintext), and the
+  paranoid nonce-uniqueness check that catches the AES-GCM
+  nonce-reuse footgun.
+- 5 conformance harness cases added (round-trip, ECKA end to
+  end, tamper detection, chain break, nonce uniqueness). 80
+  cases total now (was 75).
+
+Status row updates:
+- `services/smdp-plus`: caveat refined again. Now lists
+  AES-128-GCM segment seal/open with MAC chaining alongside
+  the existing capabilities. The documented critical-path
+  remainder shrinks to "the `prepareDownload` HTTP handler
+  that captures eUICC otPK + outer BoundProfilePackage
+  SEQUENCE assembly".
+- Coverage matrix: 5 new ES8+ rows. The Full
+  ProtectedProfilePackage framing row's "remaining work"
+  shrinks to the spec-precise AAD layout (called out as
+  hardware-bench-driven). 75 → 80 cases.
+
 smdp-plus BPP session-key derivation
 (`services/smdp-plus/internal/bpp/keys.go`):
 - Closes another layer of the BPP critical path. The previous
