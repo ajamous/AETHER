@@ -9,6 +9,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+SECURITY.md refresh:
+- Closes a documentation gap created by the recent supply-chain
+  PRs. SECURITY.md hadn't been touched since the project
+  bootstrap and didn't mention any of the protections that
+  landed since: Dependabot, govulncheck, CodeQL coverage, or
+  cosign + Sigstore release signing. Researchers and SAS-SM
+  auditors look at SECURITY.md first; an honest current view
+  there matters.
+- New "Supply-chain protections in place" section: a four-row
+  table summarising what runs and where (Dependabot in
+  `.github/dependabot.yml`, govulncheck in the per-PR CI job,
+  CodeQL on every PR + weekly schedule, cosign + Sigstore on
+  every release tag), plus a one-line note about the dual-format
+  SBOM (SPDX + CycloneDX) attached to releases and a pointer to
+  the toolchain-floor bump policy in `go.work`.
+- New "Researcher-friendly scanning" section explicitly welcomes
+  public security testing of unreleased branches and PRs and
+  spells out what to include in a fix PR (GHSA/CVE/GO-YYYY-NNNN
+  reference, `make govulncheck` output showing resolution,
+  regression test where feasible).
+- "Scope" section expanded: the release pipeline + cosign
+  identity and the auditor verifier CLI are now explicitly in
+  scope. Out-of-scope adds a clarifying note about CVEs in
+  third-party container base images (Dependabot surfaces these
+  on the next weekly window; the project's reachability story
+  for those CVEs is whatever govulncheck reports).
+- Cross-references to the dependency-update policy, the
+  govulncheck local procedure, the release-verification doc,
+  and the common-findings catalogue.
+
+`docs/sas-sm/common-findings.md` F18 ("Unverified container
+images in production"):
+- Tightened to reflect what's actually shipped: the release
+  workflow now produces dual SBOMs and cosign-signs every
+  binary + both SBOMs + SHA256SUMS via Sigstore keyless OIDC.
+  The "(planned) signs images with cosign" qualifier is
+  replaced with an honest acknowledgement that container image
+  signing is the next supply-chain follow-up — the release
+  pipeline today builds binaries, container images are operator-
+  built or built elsewhere, and Kyverno / Connaisseur are
+  called out by name as the layered-on admission-time
+  verification answer.
+
 govulncheck in CI (`.github/workflows/ci.yml`, `Makefile`):
 - Closes the next layer of the supply-chain story. Dependabot
   surfaces "a new version exists"; cosign + Sigstore prove "this

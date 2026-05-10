@@ -249,11 +249,26 @@ deployed version was built from signed-off commits.
 
 ### F18. "Unverified container images in production."
 
-- **Aether default**: the release workflow generates an SBOM
-  via syft and (planned) signs images with cosign.
+- **Aether default**: the release workflow generates dual-format
+  SBOMs (SPDX + CycloneDX) and cosign-signs every binary, both
+  SBOMs, and the SHA256SUMS file via Sigstore keyless OIDC bound
+  to the workflow identity. Adopters verify with `cosign verify-blob`
+  per [release-verification.md](release-verification.md).
+- **Container image signing** is the explicit next supply-chain
+  follow-up — the release pipeline today builds binaries; the
+  container images are operator-built or built by a separate
+  workflow and signed there. Wiring image signing into the same
+  flow is documented as the next step in
+  [release-verification.md](release-verification.md) §"What the
+  release pipeline does NOT do".
 - **Operator gotcha**: pulling from `latest` tag is not
-  verifiable. Pin to digests in your Helm values and document
-  the verification command.
+  verifiable. Pin to digests in your Helm values, run
+  `cosign verify-blob` on the binaries you build the images
+  from, and document the verification command in your runbook.
+  Once container image signing lands, layer
+  [Kyverno](https://kyverno.io/policies/cosign-image-signing/)
+  or [Connaisseur](https://github.com/sse-secure-systems/connaisseur)
+  in front of the chart for admission-time verification.
 
 ## What this catalogue does NOT cover
 
