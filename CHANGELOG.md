@@ -9,6 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+smdp-plus BPP session-key derivation
+(`services/smdp-plus/internal/bpp/keys.go`):
+- Closes another layer of the BPP critical path. The previous
+  PR shipped DPpb-signed `SmdpSigned2`; this PR ships the
+  cryptographic glue that turns an ECKA exchange into the
+  SCP03t-labelled session keys (SENC, SMAC, initialMCV) that
+  every BPP segment will be sealed under.
+- New `services/smdp-plus/internal/bpp` package with one
+  function: `Derive(spDPpriv, euiccPub, sharedInfo) →
+  SessionKeys{SENC, SMAC, InitialMCV}`. Wraps `pkg/crypto/ecka`
+  (which already does ECDH + X9.63-SHA-256 KDF) and slices the
+  output into the three named 16-byte slots SCP03t talks in
+  per SGP.22 §H.3. Derives 64 bytes from the KDF (slots 4
+  reserved for future SCP03t fields) so the slot layout stays
+  stable as those land.
+- The package is intentionally a separate import target from
+  `internal/server` so unit tests exercise key derivation
+  without an HTTP server or session store. Import direction is
+  one-way: bpp → pkg/crypto, never reverse.
+- 7 unit tests cover the SAS-SM-relevant invariants:
+  `TestDerive_BothSidesAgree` confirms the SM-DP+ and eUICC
+  derive identical keys from the matching ephemeral keypairs
+  (the prerequisite for every BPP segment to GCM-authenticate
+  on-card); `TestDerive_DifferentSharedInfoDifferentKeys`
+  checks the replay-defense binding; `TestDerive_DistinctSlices`
+  catches a slicing-aliasing bug that would silently make
+  SENC, SMAC, and MCV identical;
+  `TestDerive_StableAcrossInvocations` confirms determinism so
+  the MCV chain reconstructs the same way on both sides; nil-
+  arg + empty-sharedInfo guards.
+- `services/smdp-plus/go.mod` adds `pkg/crypto` as a workspace
+  `replace`-dep, mirroring the existing pattern this module
+  uses for `pkg/hsmclient` and `pkg/certmgrclient`.
+- 4 conformance harness cases added (both-sides agreement,
+  slice shape, sharedInfo binding, determinism). 75 cases
+  total now (was 71).
+
+Status row updates:
+- `services/smdp-plus`: caveat refined again. Now lists BPP
+  session-key derivation under `internal/bpp` as a current
+  capability. The documented critical-path remainder shrinks
+  to "AES-128-GCM segmentation around the SAIP UPP +
+  `prepareDownload` HTTP handler that captures the eUICC's
+  otPK".
+- Coverage matrix: 4 new ES8+ rows for the session-key
+  derivation invariants. The Full ProtectedProfilePackage
+  framing row's "remaining work" list shortened by one item.
+  71 → 75 cases.
+
 smdp-plus: AuthenticateClient now returns DPpb-signed SmdpSigned2:
 - Wires the SmdpSigned2 codec from the previous PR into the
   `authenticateClient` HTTP handler. When the new DPpb identity
