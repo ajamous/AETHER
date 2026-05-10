@@ -105,6 +105,36 @@ make lab-down    # tears it down
 
 See the relevant service README for service-specific instructions.
 
+## Dependency updates
+
+Aether uses [Dependabot](.github/dependabot.yml) to surface upstream
+dependency releases. The configuration covers four ecosystems and
+every Go module / Dockerfile in the repository:
+
+| Ecosystem        | Cadence            | Grouping                                      |
+| ---------------- | ------------------ | --------------------------------------------- |
+| GitHub Actions   | Weekly (Mon 09:00) | All actions in one PR                         |
+| npm (`ui/admin`) | Weekly (Mon 09:00) | Grouped: next/auth, types, lint, typescript   |
+| Docker base images (per service) | Weekly (Tue 09:00) | One PR per Dockerfile      |
+| Go modules (per `go.mod`)        | Weekly (Wed 09:00) | Patch + minor grouped per module |
+
+Major-version Go bumps land as their own PRs because they typically
+need code changes.
+
+**Security advisories** are surfaced by Dependabot whenever GitHub
+publishes one, regardless of the weekly cadence above. Maintainers
+triage these on the same working day; we do not wait for the
+Wednesday batch.
+
+**No auto-merge.** Aether ships SAS-SM-relevant code; every PR runs
+the full CI suite (build, test, helm lint, terraform validate,
+openapi lint, conformance, prometheus rules, grafana JSON,
+postgres + softhsm integration) and a maintainer reviews before
+merge. Dependabot PRs are no exception.
+
+If you submit a manual dependency PR, mark it `dependencies` so it
+sorts alongside the bot's PRs in the maintainer queue.
+
 ## Reporting security issues
 
 Do not open a public issue. See [SECURITY.md](SECURITY.md) for the
