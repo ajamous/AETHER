@@ -275,6 +275,9 @@ deployed version was built from signed-off commits.
 - [HSM vendor configuration](hsm-vendors.md) — per-vendor `.so`
   paths and quirks for AWS CloudHSM, GCP Cloud HSM, Azure
   Managed HSM, Thales Luna, Utimaco
+- [Release verification](release-verification.md) — cosign +
+  Sigstore procedure for verifying that deployed Aether
+  binaries match the published release artifacts
 - [RBAC and segregation of duties](rbac.md) — addresses F4, F10, F11
 - [Audit log retention](audit-retention.md) — addresses F4, F5, F6
 - [Disaster recovery](disaster-recovery.md) — addresses F14, F15
