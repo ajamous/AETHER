@@ -20,29 +20,30 @@ func newTestServer(t *testing.T) (*httptest.Server, session.Store) {
 	return srv, st
 }
 
-func postJSON(t *testing.T, url string, body any, dst any) *http.Response {
+func postJSON(t *testing.T, url string, body any, dst any) int {
 	t.Helper()
 	buf, _ := json.Marshal(body)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(buf))
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
+	defer resp.Body.Close()
 	if dst != nil && resp.StatusCode == http.StatusOK {
 		_ = json.NewDecoder(resp.Body).Decode(dst)
 	}
-	return resp
+	return resp.StatusCode
 }
 
 func TestInitiateAuthentication_HappyPath(t *testing.T) {
 	srv, _ := newTestServer(t)
 	var resp smdpv1.InitiateAuthenticationResponse
-	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
+	status := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
 		smdpv1.InitiateAuthenticationRequest{
 			EUICCChallenge: bytes.Repeat([]byte{0xAA}, 16),
 			SMDPAddress:    "aether.local",
 		}, &resp)
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d", httpResp.StatusCode)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
 	}
 	if resp.TransactionID == "" {
 		t.Fatal("expected non-empty transaction_id")
@@ -51,10 +52,10 @@ func TestInitiateAuthentication_HappyPath(t *testing.T) {
 
 func TestInitiateAuthentication_RejectsEmptyChallenge(t *testing.T) {
 	srv, _ := newTestServer(t)
-	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
+	status := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/initiateAuthentication",
 		smdpv1.InitiateAuthenticationRequest{}, nil)
-	if httpResp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400", httpResp.StatusCode)
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
 	}
 }
 
@@ -70,26 +71,26 @@ func TestAuthenticateClient_StateProgression(t *testing.T) {
 		t.Fatal("no transaction id")
 	}
 
-	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
+	status := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
 		smdpv1.AuthenticateClientRequest{TransactionID: tid, AuthenticateServerResponse: []byte("x")}, nil)
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d", httpResp.StatusCode)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
 	}
 
 	// Calling authenticateClient again should now fail (state != initiated).
-	httpResp = postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
+	status = postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
 		smdpv1.AuthenticateClientRequest{TransactionID: tid}, nil)
-	if httpResp.StatusCode != http.StatusConflict {
-		t.Fatalf("re-auth status = %d, want 409", httpResp.StatusCode)
+	if status != http.StatusConflict {
+		t.Fatalf("re-auth status = %d, want 409", status)
 	}
 }
 
 func TestAuthenticateClient_UnknownTID(t *testing.T) {
 	srv, _ := newTestServer(t)
-	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
+	status := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
 		smdpv1.AuthenticateClientRequest{TransactionID: "nope"}, nil)
-	if httpResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404", httpResp.StatusCode)
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
 	}
 }
 
@@ -102,19 +103,19 @@ func TestGetBoundProfilePackage_ReturnsNotImplemented(t *testing.T) {
 	postJSON(t, srv.URL+"/gsma/rsp2/es9plus/authenticateClient",
 		smdpv1.AuthenticateClientRequest{TransactionID: initResp.TransactionID}, nil)
 
-	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/getBoundProfilePackage",
+	status := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/getBoundProfilePackage",
 		smdpv1.GetBoundProfilePackageRequest{TransactionID: initResp.TransactionID}, nil)
-	if httpResp.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501 — BPP generation should be honestly unimplemented", httpResp.StatusCode)
+	if status != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501 — BPP generation should be honestly unimplemented", status)
 	}
 }
 
 func TestHandleNotification_HappyPath(t *testing.T) {
 	srv, _ := newTestServer(t)
-	httpResp := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/handleNotification",
+	status := postJSON(t, srv.URL+"/gsma/rsp2/es9plus/handleNotification",
 		smdpv1.HandleNotificationRequest{PendingNotification: []byte("notification-bytes")}, nil)
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d", httpResp.StatusCode)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d", status)
 	}
 }
 

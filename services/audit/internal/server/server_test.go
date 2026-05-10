@@ -37,18 +37,28 @@ func TestAudit_AppendListVerify(t *testing.T) {
 			t.Fatalf("post: %v", err)
 		}
 		if resp.StatusCode != http.StatusCreated {
+			resp.Body.Close()
 			t.Fatalf("status = %d", resp.StatusCode)
 		}
+		resp.Body.Close()
 	}
 
-	resp, _ := http.Get(srv.URL + "/v1/events")
+	resp, err := http.Get(srv.URL + "/v1/events")
+	if err != nil {
+		t.Fatalf("get events: %v", err)
+	}
 	var list map[string]any
 	json.NewDecoder(resp.Body).Decode(&list)
+	resp.Body.Close()
 	if list["length"].(float64) != 5 {
 		t.Fatalf("length = %v", list["length"])
 	}
 
-	resp, _ = http.Get(srv.URL + "/v1/verify")
+	resp, err = http.Get(srv.URL + "/v1/verify")
+	if err != nil {
+		t.Fatalf("get verify: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("verify status = %d", resp.StatusCode)
 	}
@@ -61,10 +71,14 @@ func TestAudit_AppendListVerify(t *testing.T) {
 
 func TestAudit_GetByseq(t *testing.T) {
 	srv := newTestServer(t)
-	http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader(`{"event":"a"}`))
-	http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader(`{"event":"b"}`))
+	mustPostBody(t, srv.URL+"/v1/events", `{"event":"a"}`)
+	mustPostBody(t, srv.URL+"/v1/events", `{"event":"b"}`)
 
-	resp, _ := http.Get(srv.URL + "/v1/events/2")
+	resp, err := http.Get(srv.URL + "/v1/events/2")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
@@ -72,10 +86,23 @@ func TestAudit_GetByseq(t *testing.T) {
 
 func TestAudit_AppendRejectsBadJSON(t *testing.T) {
 	srv := newTestServer(t)
-	resp, _ := http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader("not json"))
+	resp, err := http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader("not json"))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
+}
+
+func mustPostBody(t *testing.T, url, body string) {
+	t.Helper()
+	resp, err := http.Post(url, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("post %s: %v", url, err)
+	}
+	resp.Body.Close()
 }
 
 // TestAudit_Anchor_LabUnsigned drives /v1/anchor in the default
@@ -89,10 +116,12 @@ func TestAudit_Anchor_LabUnsigned(t *testing.T) {
 		t.Fatalf("get empty anchor: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var out map[string]any
 	json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
 	if out["length"].(float64) != 0 {
 		t.Errorf("length = %v, want 0", out["length"])
 	}
@@ -108,9 +137,13 @@ func TestAudit_Anchor_LabUnsigned(t *testing.T) {
 
 	// Append two entries and re-anchor; length should advance and
 	// tail_hash should be non-zero.
-	http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader(`{"event":"a"}`))
-	http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader(`{"event":"b"}`))
-	resp2, _ := http.Get(srv.URL + "/v1/anchor")
+	mustPostBody(t, srv.URL+"/v1/events", `{"event":"a"}`)
+	mustPostBody(t, srv.URL+"/v1/events", `{"event":"b"}`)
+	resp2, err := http.Get(srv.URL + "/v1/anchor")
+	if err != nil {
+		t.Fatalf("get anchor: %v", err)
+	}
+	defer resp2.Body.Close()
 	var out2 map[string]any
 	json.NewDecoder(resp2.Body).Decode(&out2)
 	if out2["length"].(float64) != 2 {
@@ -159,12 +192,13 @@ func TestAudit_Anchor_SignedEndToEnd(t *testing.T) {
 	defer srv.Close()
 
 	// Append one entry so the anchor is non-trivial.
-	http.Post(srv.URL+"/v1/events", "application/json", strings.NewReader(`{"event":"first"}`))
+	mustPostBody(t, srv.URL+"/v1/events", `{"event":"first"}`)
 
 	resp, err := http.Get(srv.URL + "/v1/anchor")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
