@@ -8,11 +8,11 @@ on:
 permissions:
   contents: write
   packages: write
-  id-token: write
+  id-token: write   # required for cosign keyless signing via OIDC
 
 jobs:
   release:
-    name: build and publish
+    name: build, sign, and publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,11 +43,75 @@ jobs:
             echo "==> build $name"
             (cd "$d" && go build -trimpath -ldflags="-s -w" -o "../../dist/$name" ./cmd/...)
           done
+
+          # Also build the auditor verifier CLI — adopters need it
+          # alongside the audit binary to verify signed anchors.
+          (cd tools/aether-verify-anchor && go build -trimpath -ldflags="-s -w" -o "../../dist/aether-verify-anchor" .)
+
           ls -la dist/
 
-      - name: generate SBOM
+      - name: generate SBOMs (SPDX + CycloneDX)
+        # The previous workflow swallowed errors with `|| true`. We
+        # drop that: a release without an SBOM is not a release the
+        # SAS-SM auditor will accept. Both SPDX and CycloneDX land
+        # because adopters' supply-chain stacks split between them
+        # (CSAF + OWASP DT prefer CycloneDX; SPDX is the older
+        # reference and what most US-government tooling expects).
         run: |
-          syft dir:. -o spdx-json=dist/sbom.spdx.json || true
+          set -e
+          syft dir:. -o spdx-json=dist/sbom.spdx.json
+          syft dir:. -o cyclonedx-json=dist/sbom.cdx.json
+          ls -la dist/sbom.*
+
+      - name: cosign-sign every binary + SBOM (keyless OIDC)
+        # Keyless signing via the GitHub Actions OIDC token. The
+        # signature certificates land in the public Sigstore Rekor
+        # transparency log (https://search.sigstore.dev/) — adopters
+        # can verify offline against the log entry. The verification
+        # procedure for adopters is documented in
+        # docs/sas-sm/release-verification.md.
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          COSIGN_YES: "true"
+        run: |
+          set -e
+          shopt -s nullglob
+          for f in dist/*; do
+            base=$(basename "$f")
+            # Skip files that are themselves cosign output, which
+            # would happen if the loop ran twice in the same job.
+            case "$base" in
+              *.sig|*.pem|*.cosign.bundle) continue ;;
+            esac
+            cosign sign-blob \
+              --bundle "dist/${base}.cosign.bundle" \
+              --output-signature "dist/${base}.sig" \
+              --output-certificate "dist/${base}.pem" \
+              "$f"
+            echo "signed: $base"
+          done
+          ls -la dist/
+
+      - name: write checksums
+        # SHA-256 of every artifact (including the .sig + .pem +
+        # .cosign.bundle). Adopters who don't trust Sigstore can
+        # fall back to operator-published checksums in the release
+        # notes.
+        run: |
+          set -e
+          (cd dist && sha256sum * | tee SHA256SUMS) > /dev/null
+          cat dist/SHA256SUMS
+
+      - name: cosign-sign the SHA256SUMS file
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+          COSIGN_YES: "true"
+        run: |
+          cosign sign-blob \
+            --bundle dist/SHA256SUMS.cosign.bundle \
+            --output-signature dist/SHA256SUMS.sig \
+            --output-certificate dist/SHA256SUMS.pem \
+            dist/SHA256SUMS
 
       - name: create release
         uses: softprops/action-gh-release@v2
@@ -55,3 +119,17 @@ jobs:
           generate_release_notes: true
           files: |
             dist/**
+          body: |
+            ## Verifying this release
+
+            Every binary, every SBOM, and the `SHA256SUMS` file
+            are cosign-signed via Sigstore keyless OIDC. The
+            bundle files (`*.cosign.bundle`) carry the ephemeral
+            certificate chain plus the Rekor transparency-log
+            entry — verification is offline once you have the
+            bundle.
+
+            See [docs/sas-sm/release-verification.md](https://github.com/ajamous/aether/blob/main/docs/sas-sm/release-verification.md)
+            for the full adopter procedure (`cosign verify-blob`
+            invocation, expected `--certificate-identity`,
+            SHA256SUMS cross-check).
