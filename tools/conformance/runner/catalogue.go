@@ -264,6 +264,50 @@ var catalogue = []Case{
 		RunPattern: "^TestSignVerifyP256_RoundTrip$",
 	},
 
+	// -- SAIP (SGP.22 §B Profile Package codec) ------------------
+	{
+		Family: "SAIP",
+		Title:  "ProfilePackage build + decode round-trip (header + PEEnd)",
+		Module: "pkg/saip", Package: ".",
+		RunPattern: "^TestBuild_Roundtrip$",
+	},
+	{
+		Family: "SAIP",
+		Title:  "ProfileHeader validation rejects every malformed shape",
+		Module: "pkg/saip", Package: ".",
+		RunPattern: "^TestBuild_Validation$",
+	},
+	{
+		Family: "SAIP",
+		Title:  "Decode rejects trailing bytes / non-SEQUENCE / truncated input",
+		Module: "pkg/saip", Package: ".",
+		RunPattern: "^TestDecode_Rejects",
+	},
+	{
+		Family: "SAIP",
+		Title:  "AppendRaw inserts spare ProfileElement before PEEnd",
+		Module: "pkg/saip", Package: ".",
+		RunPattern: "^TestAppendRaw_InsertsBeforeEnd$",
+	},
+	{
+		Family: "SAIP",
+		Title:  "DER encoding is byte-stable across invocations",
+		Module: "pkg/saip", Package: ".",
+		RunPattern: "^TestMarshalDER_StableAcrossInvocations$",
+	},
+	{
+		Family: "SAIP",
+		Title:  "profile-builder UPP emits valid SAIP DER (header decodes, fields match)",
+		Module: "services/profile-builder", Package: "./internal/template/...",
+		RunPattern: "^TestBuildUPP_EmitsValidSAIP$",
+	},
+	{
+		Family: "SAIP",
+		Title:  "ICCID nibble-swap matches SGP.22 §B.1",
+		Module: "services/profile-builder", Package: "./internal/template/...",
+		RunPattern: "^TestEncodeICCIDNibbleSwapped$",
+	},
+
 	// -- ES11 / ES12 — SM-DS -------------------------------------
 	{
 		Family: "ES11/ES12",

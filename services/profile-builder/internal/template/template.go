@@ -9,7 +9,9 @@
 //
 // Today the SAIP codec lives outside this package (planned under
 // pkg/saip). This package handles template I/O and validation; the
-// build step returns a JSON envelope until the codec lands.
+// build step now produces real DER-encoded SAIP bytes via
+// pkg/saip — minimum-viable header + PEEnd today, richer types
+// land as pkg/saip grows.
 package template
 
 import (
@@ -22,6 +24,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/ajamous/aether/pkg/saip"
 )
 
 // OTABytes returns the decoded OTA byte fields. Empty fields decode to nil.
@@ -192,21 +196,32 @@ func ValidateSubscriber(s *SubscriberData) error {
 	return nil
 }
 
-// UPPEnvelope is the JSON-shaped placeholder for a real SAIP UPP.
-// It captures the inputs the SAIP codec will marshal once it lands;
-// services downstream (smdp-plus) treat it as opaque, so swapping
-// the body for ASN.1 bytes later is a non-breaking change.
+// UPPEnvelope wraps a SAIP-encoded UPP plus the inputs that
+// produced it. The SAIP bytes are the wire artifact downstream
+// services (smdp-plus) consume; the Profile + Subscriber fields
+// are kept for human-readable inspection through the admin UI.
+//
+// SAIP today is the minimum-viable subset shipped by pkg/saip:
+// ProfileHeader + PEEnd. Richer ProfileElements (PE-USIM,
+// PE-PinCodes, etc.) land as pkg/saip grows; their bytes will
+// appear inside SAIP without changing this envelope's shape.
 type UPPEnvelope struct {
 	Profile    *Profile        `json:"profile"`
 	Subscriber *SubscriberData `json:"subscriber"`
-	Note       string          `json:"_note"`
+	// SAIP is the DER-encoded ProfilePackage. Base64-encoded in
+	// JSON so operators inspecting through the admin UI see a
+	// stable string.
+	SAIP []byte `json:"saip_der"`
+	// Note carries any human-readable caveat about the encoding
+	// (e.g. "minimum-viable subset" while pkg/saip is incomplete).
+	Note string `json:"_note,omitempty"`
 }
 
-// BuildUPP merges p and s into a UPP envelope, validating both inputs.
-//
-// SAIP-faithful encoding lives in pkg/saip (planned). This function's
-// signature does not change when that codec lands; only the returned
-// bytes do.
+// BuildUPP merges p and s into a UPP envelope, validating both
+// inputs and emitting a real DER-encoded SAIP ProfilePackage via
+// pkg/saip. Today's package only encodes the header + PEEnd; the
+// envelope's `saip_der` field is short by design until richer
+// ProfileElements land in pkg/saip.
 func BuildUPP(p *Profile, s *SubscriberData) (*UPPEnvelope, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -214,9 +229,86 @@ func BuildUPP(p *Profile, s *SubscriberData) (*UPPEnvelope, error) {
 	if err := ValidateSubscriber(s); err != nil {
 		return nil, err
 	}
+
+	iccidBytes, err := encodeICCIDNibbleSwapped(s.ICCID)
+	if err != nil {
+		return nil, fmt.Errorf("upp: %w", err)
+	}
+	hdr := saip.ProfileHeader{
+		MajorVersion: saip.SAIPMajorVersion,
+		MinorVersion: saip.SAIPMinorVersion,
+		ProfileType:  profileTypeFor(p),
+		ICCID:        iccidBytes,
+		// Default to the GSMA mandatory-services baseline; profiles
+		// that need more list them in their own template field once
+		// the schema grows.
+		EUICCMandatoryServices: []string{"contactless"},
+	}
+	pkg, err := saip.Build(hdr)
+	if err != nil {
+		return nil, fmt.Errorf("upp: saip build: %w", err)
+	}
+	der, err := pkg.MarshalDER()
+	if err != nil {
+		return nil, fmt.Errorf("upp: saip marshal: %w", err)
+	}
+
 	return &UPPEnvelope{
 		Profile:    p,
 		Subscriber: s,
-		Note:       "JSON envelope — replaced with SAIP-encoded UPP when pkg/saip lands",
+		SAIP:       der,
+		Note:       "SAIP minimum-viable subset (header + PEEnd); richer ProfileElements land as pkg/saip grows",
 	}, nil
+}
+
+// profileTypeFor returns the SGP.22 profileType string. We use
+// the template's `name` so operators see their template name in
+// any decoded SAIP; fallback to the GSMA generic test string if
+// the template is unnamed (validate() should have caught this
+// already, defensive).
+func profileTypeFor(p *Profile) string {
+	if p.Name != "" {
+		return p.Name
+	}
+	return saip.ProfileTypeGSMA
+}
+
+// encodeICCIDNibbleSwapped converts a 19- or 20-digit decimal
+// ICCID string into the 10-octet nibble-swapped BCD form SGP.22
+// §B.1 requires.
+//
+// For each pair (d1, d2) of decimal digits, the resulting octet
+// is 0x[d2][d1] — i.e. low nibble carries the first digit, high
+// nibble carries the second. A 19-digit ICCID is right-padded
+// with the BCD pad nibble 0xF.
+func encodeICCIDNibbleSwapped(iccid string) ([]byte, error) {
+	if len(iccid) != 19 && len(iccid) != 20 {
+		return nil, fmt.Errorf("iccid %q must be 19 or 20 digits, got %d", iccid, len(iccid))
+	}
+	// Pad to 20 with the BCD pad-nibble.
+	padded := iccid
+	if len(padded) == 19 {
+		padded += "F"
+	}
+	out := make([]byte, 10)
+	for i := 0; i < 10; i++ {
+		hi := digitToNibble(padded[2*i+1])
+		lo := digitToNibble(padded[2*i])
+		if hi == 0xFF || lo == 0xFF {
+			return nil, fmt.Errorf("iccid %q contains non-digit at offset %d", iccid, 2*i)
+		}
+		out[i] = (hi << 4) | lo
+	}
+	return out, nil
+}
+
+func digitToNibble(c byte) byte {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0'
+	case c == 'F' || c == 'f':
+		return 0x0F
+	default:
+		return 0xFF
+	}
 }
