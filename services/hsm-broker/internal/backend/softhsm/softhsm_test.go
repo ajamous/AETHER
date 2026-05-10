@@ -100,11 +100,14 @@ func TestSoftHSM_GenerateAndSignAndVerify(t *testing.T) {
 	// Verify the signature client-side using stdlib ECDSA against the
 	// public key we just got back. This proves the SoftHSM round-trip
 	// is correct end-to-end, not just that something came back.
-	x, y := elliptic.Unmarshal(elliptic.P256(), gen.PublicKey)
-	if x == nil {
-		t.Fatal("failed to unmarshal public key")
+	if len(gen.PublicKey) != 65 || gen.PublicKey[0] != 0x04 {
+		t.Fatal("failed to unmarshal public key: not an uncompressed P-256 point")
 	}
-	pub := &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}
+	pub := &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     new(big.Int).SetBytes(gen.PublicKey[1:33]),
+		Y:     new(big.Int).SetBytes(gen.PublicKey[33:65]),
+	}
 	var parsed struct{ R, S *big.Int }
 	if _, err := asn1.Unmarshal(sig.SignatureDER, &parsed); err != nil {
 		t.Fatalf("parse signature: %v", err)
