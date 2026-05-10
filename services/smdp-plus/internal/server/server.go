@@ -28,7 +28,8 @@ import (
 type Server struct {
 	sessions session.Store
 	hsm      *hsmclient.Client
-	identity *identity.Identity
+	identity *identity.Identity // DPauth — signs ServerSigned1 (§5.7.13)
+	dppb     *identity.Identity // DPpb   — signs SmdpSigned2 (§5.7.14)
 	trust    *identity.TrustMaterial
 	address  string // SM-DP+ public address (goes into ServerSigned1.serverAddress)
 }
@@ -36,11 +37,17 @@ type Server struct {
 // Config holds the optional dependencies. New() works with the
 // zero-value config: signing and verification are disabled and the
 // server falls back to the older "skeleton" behaviour. Setting HSM
-// and Identity enables signing on initiateAuthentication; setting
-// Trust additionally enables eUICC verification on authenticateClient.
+// and Identity enables ServerSigned1 signing on
+// initiateAuthentication; setting Trust additionally enables eUICC
+// verification on authenticateClient. Setting DPpb additionally
+// enables SmdpSigned2 signing on authenticateClient — the handler
+// returns SmdpSigned2 + DPpb signature + DPpb cert that the eUICC
+// will verify before generating its own ephemeral pubkey for the
+// upcoming BPP exchange.
 type Config struct {
 	HSM      *hsmclient.Client
-	Identity *identity.Identity
+	Identity *identity.Identity // DPauth
+	DPpb     *identity.Identity // DPpb (optional; gates SmdpSigned2)
 	Trust    *identity.TrustMaterial
 	Address  string
 }
@@ -52,6 +59,7 @@ func New(s session.Store, cfgs ...Config) *Server {
 	if len(cfgs) > 0 {
 		srv.hsm = cfgs[0].HSM
 		srv.identity = cfgs[0].Identity
+		srv.dppb = cfgs[0].DPpb
 		srv.trust = cfgs[0].Trust
 		srv.address = cfgs[0].Address
 	}
@@ -62,6 +70,15 @@ func New(s session.Store, cfgs ...Config) *Server {
 // ServerSigned1/ServerSignature1/ServerCertificate.
 func (s *Server) signingEnabled() bool {
 	return s.hsm != nil && s.identity != nil && s.address != ""
+}
+
+// dppbSigningEnabled reports whether the server can populate
+// SmdpSigned2/SMDPSignature2/SMDPCertificate on the
+// authenticateClient response. Lab default is disabled; production
+// configs supply a DPpb identity (separate ceremony lifecycle from
+// DPauth).
+func (s *Server) dppbSigningEnabled() bool {
+	return s.hsm != nil && s.dppb != nil
 }
 
 // verificationEnabled reports whether the server can verify the
@@ -287,9 +304,45 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("update: %v", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, smdpv1.AuthenticateClientResponse{
-		TransactionID: req.TransactionID,
-	})
+
+	resp := smdpv1.AuthenticateClientResponse{TransactionID: req.TransactionID}
+
+	// SmdpSigned2 (§5.7.14) is the SM-DP+'s commitment that the
+	// upcoming BPP belongs to this transaction. The eUICC verifies
+	// the signature against the SM-DP+'s DPpb cert chain before
+	// generating its own ephemeral pubkey for ECKA. We populate the
+	// response when DPpb signing is configured (production); lab
+	// mode leaves the fields empty so test harnesses without a
+	// trust store can drive the flow.
+	//
+	// bppEuiccOtpk is intentionally omitted at this step. The eUICC
+	// has not yet generated its ephemeral pubkey; it does so AFTER
+	// verifying SmdpSigned2 and returns it inside the
+	// PrepareDownloadResponse that GetBoundProfilePackage carries.
+	// Re-signing SmdpSigned2 with the otpk filled in is the BPP
+	// follow-up's job.
+	if s.dppbSigningEnabled() {
+		tidBytes, err := hexDecode(req.TransactionID)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("tid decode: %v", err))
+			return
+		}
+		payload := signing.SmdpSigned2{
+			TransactionID:  tidBytes,
+			CCRequiredFlag: false,
+			// BPPEuiccOtpk: nil — populated at BPP-step in a follow-up.
+		}
+		signedDER, sig, err := signing.SignSmdpSigned2(r.Context(), s.hsm, s.dppb.KeyID, payload)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("dppb sign: %v", err))
+			return
+		}
+		resp.SMDPSigned2 = signedDER
+		resp.SMDPSignature2 = sig
+		resp.SMDPCertificate = s.dppb.CertDER
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // bytesEqual is a constant-time-ish equality check. We keep it

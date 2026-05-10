@@ -32,7 +32,8 @@ func run() error {
 		tlsKey        = flag.String("tls-key", "", "TLS server key")
 		certmgrURL    = flag.String("certmgr", "", "certmgr base URL; enables eUICC verification on authenticateClient")
 		hsmBrokerURL  = flag.String("hsm-broker", "", "hsm-broker base URL; enables ServerSigned1 signing")
-		dpauthLabel   = flag.String("dpauth-label", "DPauth", "HSM key label for the DPauth identity")
+		dpauthLabel   = flag.String("dpauth-label", "DPauth", "HSM key label for the DPauth identity (signs ServerSigned1, §5.7.13)")
+		dppbLabel     = flag.String("dppb-label", "", "HSM key label for the DPpb profile-binding identity (signs SmdpSigned2, §5.7.14). Empty disables SmdpSigned2 in authenticateClient responses.")
 		serverAddress = flag.String("address", "aether.local", "SM-DP+ public address (goes into ServerSigned1.serverAddress)")
 		ttl           = flag.Duration("session-ttl", 10*time.Minute, "session TTL")
 		pgURL         = flag.String("pg-url", "", "PostgreSQL URL; if empty, the in-memory session store is used (lab default)")
@@ -87,6 +88,26 @@ func run() error {
 			slog.String("dpauth_label", id.Label),
 			slog.String("address", *serverAddress),
 		)
+
+		// DPpb is the profile-binding identity used to sign
+		// SmdpSigned2 in authenticateClient. Separate ceremony
+		// lifecycle from DPauth (rotated on its own cadence per
+		// docs/sas-sm/key-ceremony.md). Disabled when empty.
+		if *dppbLabel != "" {
+			dpCtx, dpCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			dppb, err := identity.EnsureLabIdentity(dpCtx, hc, *dppbLabel, *serverAddress)
+			dpCancel()
+			if err != nil {
+				return fmt.Errorf("ensure DPpb identity: %w", err)
+			}
+			cfg.DPpb = dppb
+			logger.Info("smdp-plus DPpb signing enabled (SmdpSigned2 §5.7.14)",
+				slog.String("dppb_key_id", dppb.KeyID),
+				slog.String("dppb_label", dppb.Label),
+			)
+		} else {
+			logger.Warn("smdp-plus DPpb signing DISABLED (no --dppb-label); authenticateClient returns no SmdpSigned2 — eUICCs will reject this in production")
+		}
 	} else {
 		logger.Warn("smdp-plus signing DISABLED (no --hsm-broker); initiateAuthentication returns unsigned skeleton")
 	}
