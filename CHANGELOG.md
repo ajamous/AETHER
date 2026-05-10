@@ -9,6 +9,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+smdp-plus `getBoundProfilePackage` — the BPP critical path closes:
+- This is the milestone PR. Every prior PR in the series shipped
+  one layer of the BPP construction in isolation (SAIP UPP,
+  SmdpSigned2, ServerSigned1 verification chain, BPP session-key
+  derivation, AES-128-GCM segmentation, outer
+  BoundProfilePackage SEQUENCE). This PR **wires them all
+  together** so the handler returns a real DER-encoded BPP
+  instead of the honest 501 it has carried since project
+  bootstrap.
+- New `handleGetBoundProfilePackage` flow when DPpb is configured:
+  1. Generates a fresh SM-DP+ ECKA P-256 ephemeral keypair via
+     `pkg/crypto/ecka`.
+  2. Parses the eUICC otPK from the request (uncompressed
+     X9.63 P-256 point — `0x04 || X(32) || Y(32)`).
+  3. Builds sharedInfo from the SCP03t ControlRefTemplate
+     parameters concatenated with the session's transactionId.
+  4. Derives SCP03t SENC/SMAC/MCV via `bpp.Derive`.
+  5. Builds a minimum-viable SAIP UPP via `pkg/saip`
+     (ProfileHeader + PEEnd; ICCID nibble-swapped from the
+     session if present, else flagged-0xFF placeholder).
+  6. Seals the UPP into AES-128-GCM segments via
+     `bpp.SealSegments`.
+  7. Computes the §5.7.7 signed-input bytes (transactionId ‖
+     smdpOtpk ‖ euiccOtpk), SHA-256s, asks hsm-broker to sign
+     with the DPpb key.
+  8. Populates the InitialiseSecureChannelRequest (RemoteOpId =
+     installBoundProfilePackage, full ControlRefTemplate, smdpOtpk,
+     smdpSign).
+  9. Assembles the outer BoundProfilePackage SEQUENCE via
+     `bpp.AssembleBoundProfilePackage` and returns the DER in
+     the response.
+- Lab path unchanged: when DPpb isn't configured, the handler
+  returns honest 501 — the existing
+  `TestGetBoundProfilePackage_ReturnsNotImplemented` still
+  passes.
+- Strict input validation: missing eUICC otPK → 400; wrong
+  length → 400; right length but wrong-first-byte (compressed
+  prefix where uncompressed expected) → 400. Never returns a
+  half-built BPP.
+- New `EUICCOtpk` field on `GetBoundProfilePackageRequest`. In
+  SGP.22's full flow this would be parsed out of the signed
+  PrepareDownloadResponse blob; until that parser+verifier
+  lands, callers (and the in-tree test harness) supply
+  EUICCOtpk directly. Documented honestly in the type's
+  godoc and the coverage matrix.
+- 2 new server-level integration tests:
+  - `TestGetBoundProfilePackage_HappyPath` drives the full
+    initiate → authenticate → getBPP flow with DPpb wired,
+    decodes the response BPP, and verifies the outer wrapper
+    starts with `[APPLICATION 54]` constructed-high-tag-form
+    (`0x7F 0x36`). As close to "an eUICC would accept this"
+    as we get without a hardware bench.
+  - `TestGetBoundProfilePackage_RejectsMissingEuiccOtpk`
+    covers all three malformed-input paths.
+  - New `newAuthcheckSrvWithDPpb` test helper bundles the
+    DPpb-enabled fixture for reuse.
+- 2 conformance harness cases added; the existing 501-path
+  case is reframed as "lab path returns honest 501". 88 cases
+  total now (was 86).
+
+Status updates:
+- `services/smdp-plus`: caveat tightens dramatically. The
+  `getBoundProfilePackage`-returns-501 caveat is replaced
+  with: "the handler returns a real DER-encoded BPP when DPpb
+  is configured (lab mode without DPpb still returns honest
+  501). Spec-precise per-segment AAD layout +
+  signature-verified PrepareDownloadResponse parsing remain
+  hardware-bench follow-ups."
+- Coverage matrix: GetBoundProfilePackage row split into
+  three explicit rows (lab path, happy path, input
+  validation) plus a new "cross-vendor eUICC interop on a
+  real device" row that explicitly lists the
+  hardware-bench-only items.
+- Conformance harness: 86 → 88 cases.
+
+**Phase 1 milestone unlocked.** ROADMAP.md §"Phase 1 — Consumer
+SM-DP+ MVP" lists "install a profile on a sysmoEUICC1-C2T from
+a self-hosted Aether instance" as the milestone. The
+software-only path to that milestone is now complete: every
+RSP message shape, every signature, every key derivation, and
+the BPP wrapping all ship in tree. What remains is hardware-
+bench-driven: the per-segment AAD layout and the
+PrepareDownloadResponse parsing both need a real eUICC to
+verify against, which is genuinely out of CI's scope and
+called out as such in the coverage matrix.
+
 smdp-plus BPP outer-SEQUENCE assembly
 (`services/smdp-plus/internal/bpp/bpp.go`):
 - Closes the **last codec layer** in the BPP critical path.

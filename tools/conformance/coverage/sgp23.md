@@ -54,7 +54,10 @@ internal).
 | EuiccSigned1 chain validation              | Automated | `services/smdp-plus/internal/signing/euicc_test.go::TestVerify_HappyPath` plus 4 negative cases |
 | EuiccSigned1 server-challenge replay defense | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsWrongServerChallenge` |
 | EuiccSigned1 unknown CI rejection          | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsEUICCFromUnknownCI` |
-| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). Every BPP codec layer ships in `services/smdp-plus/internal/bpp`: ProfileHeader UPP (`pkg/saip`), DPpb-signed SmdpSigned2 (§5.7.14), §H.3 session-key derivation, AES-128-GCM segmentation with MAC chaining, outer BoundProfilePackage (§5.7.6) SEQUENCE with InitialiseSecureChannelRequest (§5.7.7). Remaining work is **wiring** — capture eUICC otPK from the LPA's PrepareDownloadResponse, generate SM-DP+ ephemeral keypair, sign InitialiseSecureChannelRequest with DPpb, assemble. Per-segment AAD layout (counters, ICV framing) is hardware-bench follow-up |
+| GetBoundProfilePackage — lab path (no DPpb)   | Automated | `TestGetBoundProfilePackage_ReturnsNotImplemented` — returns honest 501 when DPpb isn't configured |
+| GetBoundProfilePackage — happy path with DPpb wired | Automated | `TestGetBoundProfilePackage_HappyPath` — drives initiateAuthentication → authenticateClient → getBoundProfilePackage end-to-end with a fresh ECKA exchange; the handler generates an SM-DP+ ephemeral keypair, derives session keys, builds a SAIP UPP, seals segments, signs the InitialiseSecureChannelRequest with DPpb, and assembles the outer BoundProfilePackage. Returns 200 with a real DER-encoded `[APPLICATION 54]` BPP |
+| GetBoundProfilePackage — input validation     | Automated | `TestGetBoundProfilePackage_RejectsMissingEuiccOtpk` — missing or malformed eUICC otPK returns 400, never a partial BPP |
+| Cross-vendor eUICC interop on a real device   | Pending   | Hardware-bench follow-up: spec-precise per-segment AAD layout (SGP.22 §H.3 counter encoding + ICV framing) + signature-verified PrepareDownloadResponse parsing (extracting eUICC otPK from the LPA's signed blob instead of accepting it as a direct request field). The in-tree path round-trips against itself; cross-vendor verification waits on the bench |
 | SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed) | Automated | `services/smdp-plus/internal/signing/smdp_signed2_test.go::TestSmdpSigned2_RoundTrip*` |
 | SmdpSigned2 validation rejects bad transactionId + bppEuiccOtpk shapes | Automated | `TestSmdpSigned2_ValidationCatches`     |
 | SmdpSigned2 signature verifies end-to-end (DPpb path)   | Automated | `TestSignSmdpSigned2_VerifiesEndToEnd`     |
@@ -199,7 +202,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **86 cases across 10 families** (ES2+, ES9+,
+summary. Today: **88 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in

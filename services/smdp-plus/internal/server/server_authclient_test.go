@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -480,4 +481,247 @@ func TestAuthenticateClient_NoDPpbLeavesSmdpSigned2Empty(t *testing.T) {
 		t.Errorf("DPpb-not-configured path must leave SmdpSigned2 fields empty; got SMDPSigned2=%d SMDPSignature2=%d SMDPCertificate=%d",
 			len(out.SMDPSigned2), len(out.SMDPSignature2), len(out.SMDPCertificate))
 	}
+}
+
+// TestGetBoundProfilePackage_HappyPath drives a full SGP.22
+// initiate → authenticate → getBPP flow with DPpb wired and an
+// eUICC ephemeral pubkey supplied directly. Verifies the
+// returned BoundProfilePackage:
+//
+//   - decodes from the JSON response as non-empty DER bytes
+//   - starts with the [APPLICATION 54] constructed high-tag-form
+//     opening (matches bpp.AssembleBoundProfilePackage's outer wrap)
+//
+// As close to "an eUICC would accept this BPP" as we get without a
+// hardware bench. Cross-vendor interop is the named follow-up.
+func TestGetBoundProfilePackage_HappyPath(t *testing.T) {
+	chain := newLabChain(t)
+
+	smdpKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pubPoint := elliptic.Marshal(elliptic.P256(), smdpKey.PublicKey.X, smdpKey.PublicKey.Y)
+	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/v1/generate-key-pair"):
+			json.NewEncoder(w).Encode(hsmclient.GenerateKeyPairResponse{
+				Handle:    hsmclient.KeyHandle{ID: "key", Label: "key", Kind: hsmclient.KeyKindECDSA, Curve: hsmclient.CurveP256},
+				PublicKey: pubPoint,
+			})
+		case strings.HasSuffix(r.URL.Path, "/v1/sign"):
+			var req struct {
+				KeyID  string `json:"key_id"`
+				Digest []byte `json:"digest"`
+			}
+			json.NewDecoder(r.Body).Decode(&req)
+			r2, s2, _ := ecdsa.Sign(rand.Reader, smdpKey, req.Digest)
+			der, _ := asn1.Marshal(struct{ R, S *big.Int }{R: r2, S: s2})
+			json.NewEncoder(w).Encode(hsmclient.SignResponse{SignatureDER: der})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer brokerSrv.Close()
+	hc := hsmclient.New(brokerSrv.URL)
+
+	dpauth, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPauth", "aether.local")
+	dppb, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPpb", "aether.local")
+
+	roots := x509.NewCertPool()
+	roots.AddCert(chain.rootCert)
+	tm := &identity.TrustMaterial{Roots: roots, Intermediates: x509.NewCertPool()}
+
+	smdpSrv := httptest.NewServer(New(
+		session.NewMemoryStore(time.Minute),
+		Config{HSM: hc, Identity: dpauth, DPpb: dppb, Trust: tm, Address: "aether.local"},
+	).Routes())
+	defer smdpSrv.Close()
+
+	// initiateAuthentication.
+	euiccChallenge := bytes.Repeat([]byte{0xAB}, 16)
+	body, _ := json.Marshal(smdpv1.InitiateAuthenticationRequest{
+		EUICCChallenge: euiccChallenge,
+		SMDPAddress:    "aether.local",
+	})
+	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	var initOut smdpv1.InitiateAuthenticationResponse
+	json.NewDecoder(resp.Body).Decode(&initOut)
+	resp.Body.Close()
+	parsedSigned1, _ := signing.UnmarshalServerSigned1(initOut.ServerSigned1)
+	tidBytes := parsedSigned1.TransactionID
+	serverChallenge := parsedSigned1.ServerChallenge
+
+	// authenticateClient.
+	signed, sig, leafDER, eumDER := chain.signAuthenticateResponse(t, tidBytes, "aether.local", serverChallenge)
+	authBody, _ := json.Marshal(smdpv1.AuthenticateClientRequest{
+		TransactionID:   hexEncode(tidBytes),
+		EuiccSigned1DER: signed,
+		EuiccSignature1: sig,
+		EuiccCertDER:    leafDER,
+		EumCertDER:      eumDER,
+	})
+	resp, err := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	if err != nil {
+		t.Fatalf("authenticateClient: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var prob map[string]any
+		json.NewDecoder(resp.Body).Decode(&prob)
+		t.Fatalf("authenticateClient status = %d, body = %v", resp.StatusCode, prob)
+	}
+	resp.Body.Close()
+
+	// Generate a real eUICC ephemeral pubkey to feed in.
+	euiccEphemeral, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("euicc ephemeral keygen: %v", err)
+	}
+	euiccOtpk := euiccEphemeral.PublicKey().Bytes() // uncompressed X9.63 point
+
+	// getBoundProfilePackage with the eUICC otPK supplied directly.
+	bppBody, _ := json.Marshal(smdpv1.GetBoundProfilePackageRequest{
+		TransactionID: hexEncode(tidBytes),
+		EUICCOtpk:     euiccOtpk,
+	})
+	resp, err = http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(bppBody))
+	if err != nil {
+		t.Fatalf("getBPP: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var prob map[string]any
+		json.NewDecoder(resp.Body).Decode(&prob)
+		t.Fatalf("getBPP status = %d (want 200), body = %v", resp.StatusCode, prob)
+	}
+
+	var out smdpv1.GetBoundProfilePackageResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.TransactionID != hexEncode(tidBytes) {
+		t.Errorf("transactionId echo = %q, want %q", out.TransactionID, hexEncode(tidBytes))
+	}
+	if len(out.BoundProfilePackage) == 0 {
+		t.Fatal("bound_profile_package empty — handler did not produce a BPP")
+	}
+	// Outer tag is [APPLICATION 54] constructed high-tag-form:
+	// 0x7F (APPLICATION + constructed + high-tag) followed by 0x36 (= 54).
+	if out.BoundProfilePackage[0] != 0x7F {
+		t.Errorf("BPP first byte = 0x%02x, want 0x7F (APPLICATION constructed)", out.BoundProfilePackage[0])
+	}
+	if len(out.BoundProfilePackage) > 1 && out.BoundProfilePackage[1] != 0x36 {
+		t.Errorf("BPP second byte = 0x%02x, want 0x36 (tag VLQ for 54)", out.BoundProfilePackage[1])
+	}
+}
+
+// TestGetBoundProfilePackage_RejectsMissingEuiccOtpk confirms the
+// new wired path validates inputs strictly: missing or
+// malformed eUICC otPK returns 400, not a half-built BPP.
+func TestGetBoundProfilePackage_RejectsMissingEuiccOtpk(t *testing.T) {
+	chain := newLabChain(t)
+	url, txid, serverChallenge, cleanup := newAuthcheckSrvWithDPpb(t, chain)
+	defer cleanup()
+
+	// Drive authenticateClient so the session is in `authenticated`.
+	signed, sig, leafDER, eumDER := chain.signAuthenticateResponse(t, txid, "aether.local", serverChallenge)
+	authBody, _ := json.Marshal(smdpv1.AuthenticateClientRequest{
+		TransactionID:   hexEncode(txid),
+		EuiccSigned1DER: signed,
+		EuiccSignature1: sig,
+		EuiccCertDER:    leafDER,
+		EumCertDER:      eumDER,
+	})
+	resp, _ := http.Post(url+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	resp.Body.Close()
+
+	// Missing euicc_otpk.
+	body, _ := json.Marshal(smdpv1.GetBoundProfilePackageRequest{TransactionID: hexEncode(txid)})
+	resp, _ = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing otpk status = %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// Malformed (wrong length).
+	body, _ = json.Marshal(smdpv1.GetBoundProfilePackageRequest{
+		TransactionID: hexEncode(txid),
+		EUICCOtpk:     []byte{0x04, 0x01, 0x02},
+	})
+	resp, _ = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("malformed otpk status = %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// Right length but wrong first byte (compressed-form prefix
+	// where uncompressed expected).
+	bad := append([]byte{0x02}, bytes.Repeat([]byte{0x01}, 64)...)
+	body, _ = json.Marshal(smdpv1.GetBoundProfilePackageRequest{
+		TransactionID: hexEncode(txid),
+		EUICCOtpk:     bad,
+	})
+	resp, _ = http.Post(url+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(body))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("wrong-first-byte otpk status = %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+// newAuthcheckSrvWithDPpb is the DPpb-enabled variant of
+// newAuthcheckSrv. Builds a smdp-plus server with both DPauth +
+// DPpb identities, drives initiateAuthentication, and returns the
+// (URL, txid, serverChallenge, cleanup) tuple the caller needs to
+// finish the flow.
+func newAuthcheckSrvWithDPpb(t *testing.T, chain *labChain) (smdpURL string, txid []byte, serverChallenge []byte, cleanup func()) {
+	t.Helper()
+
+	smdpKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pubPoint := elliptic.Marshal(elliptic.P256(), smdpKey.PublicKey.X, smdpKey.PublicKey.Y)
+	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/v1/generate-key-pair"):
+			json.NewEncoder(w).Encode(hsmclient.GenerateKeyPairResponse{
+				Handle:    hsmclient.KeyHandle{ID: "key", Label: "key", Kind: hsmclient.KeyKindECDSA, Curve: hsmclient.CurveP256},
+				PublicKey: pubPoint,
+			})
+		case strings.HasSuffix(r.URL.Path, "/v1/sign"):
+			var req struct {
+				KeyID  string `json:"key_id"`
+				Digest []byte `json:"digest"`
+			}
+			json.NewDecoder(r.Body).Decode(&req)
+			r2, s2, _ := ecdsa.Sign(rand.Reader, smdpKey, req.Digest)
+			der, _ := asn1.Marshal(struct{ R, S *big.Int }{R: r2, S: s2})
+			json.NewEncoder(w).Encode(hsmclient.SignResponse{SignatureDER: der})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	hc := hsmclient.New(brokerSrv.URL)
+
+	dpauth, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPauth", "aether.local")
+	dppb, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPpb", "aether.local")
+
+	roots := x509.NewCertPool()
+	roots.AddCert(chain.rootCert)
+	tm := &identity.TrustMaterial{Roots: roots, Intermediates: x509.NewCertPool()}
+
+	smdpSrv := httptest.NewServer(New(
+		session.NewMemoryStore(time.Minute),
+		Config{HSM: hc, Identity: dpauth, DPpb: dppb, Trust: tm, Address: "aether.local"},
+	).Routes())
+
+	euiccChallenge := bytes.Repeat([]byte{0xAB}, 16)
+	body, _ := json.Marshal(smdpv1.InitiateAuthenticationRequest{
+		EUICCChallenge: euiccChallenge,
+		SMDPAddress:    "aether.local",
+	})
+	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(body))
+	var initOut smdpv1.InitiateAuthenticationResponse
+	json.NewDecoder(resp.Body).Decode(&initOut)
+	resp.Body.Close()
+	parsedSigned1, _ := signing.UnmarshalServerSigned1(initOut.ServerSigned1)
+	cleanup = func() {
+		smdpSrv.Close()
+		brokerSrv.Close()
+	}
+	return smdpSrv.URL, parsedSigned1.TransactionID, parsedSigned1.ServerChallenge, cleanup
 }

@@ -9,16 +9,23 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdh"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/ajamous/aether/pkg/crypto/ecka"
 	"github.com/ajamous/aether/pkg/hsmclient"
+	"github.com/ajamous/aether/pkg/saip"
 	smdpv1 "github.com/ajamous/aether/services/smdp-plus/api/v1"
+	"github.com/ajamous/aether/services/smdp-plus/internal/bpp"
 	"github.com/ajamous/aether/services/smdp-plus/internal/identity"
 	"github.com/ajamous/aether/services/smdp-plus/internal/session"
 	"github.com/ajamous/aether/services/smdp-plus/internal/signing"
@@ -361,7 +368,45 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
-// handleGetBoundProfilePackage implements SGP.22 §5.6.4 (skeleton).
+// handleGetBoundProfilePackage implements SGP.22 §5.6.4.
+//
+// When DPpb signing is configured AND the request supplies a
+// well-formed eUICC otPK, the handler:
+//
+//  1. Generates a fresh ECKA P-256 ephemeral keypair for the
+//     SM-DP+ side.
+//  2. Derives SCP03t SENC/SMAC/MCV via bpp.Derive.
+//  3. Builds a minimum-viable SAIP UPP via pkg/saip
+//     (ProfileHeader + PEEnd — same shape profile-builder
+//     emits today).
+//  4. Seals the UPP into AES-128-GCM segments via
+//     bpp.SealSegments.
+//  5. Builds an InitialiseSecureChannelRequest, computes the
+//     §5.7.7 signed-input bytes (transactionId || smdpOtpk ||
+//     euiccOtpk), asks hsm-broker to sign with the DPpb key,
+//     and populates the request's smdpSign field.
+//  6. Assembles the outer BoundProfilePackage SEQUENCE via
+//     bpp.AssembleBoundProfilePackage and returns the DER.
+//
+// When DPpb is not configured, the handler returns honest 501 —
+// same as before — so the lab path stays HSM-free.
+//
+// What this handler does NOT do today, and is the named
+// hardware-bench follow-up:
+//   - Parse the LPA's signed PrepareDownloadResponse blob to
+//     extract eUICC otPK (the in-tree path takes the otPK as a
+//     direct request field). Also unverified: the eUICC's
+//     signature over its otPK against the eUICC cert from
+//     AuthenticateClient.
+//   - Spec-precise per-segment AAD layout (counter encoding,
+//     ICV framing) — bpp.SealSegments uses a SCP03t-shape
+//     chained-MAC model that round-trips against itself but
+//     hasn't been cross-vendor verified against a real eUICC.
+//   - Carry the SAIP UPP from a chosen profile-builder
+//     template — the in-tree UPP is a header-only profile
+//     stamped with the session's ICCID. Wiring the
+//     profile-builder selection lands in a follow-up once
+//     pkg/saip's ProfileElement catalogue grows.
 func (s *Server) handleGetBoundProfilePackage(w http.ResponseWriter, r *http.Request) {
 	var req smdpv1.GetBoundProfilePackageRequest
 	if !decodeJSON(w, r, &req) {
@@ -377,9 +422,184 @@ func (s *Server) handleGetBoundProfilePackage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// BPP generation lands when SAIP codec + spec ASN.1 modules are in
-	// the tree. Refusing to ship a fake BPP is deliberate — see README.
-	writeProblem(w, http.StatusNotImplemented, "BPP generation pending SAIP codec; see services/smdp-plus/README.md")
+	if !s.dppbSigningEnabled() {
+		// Lab default: no DPpb, no BPP. Honest 501, same as
+		// before — refusing to ship a fake BPP is deliberate.
+		writeProblem(w, http.StatusNotImplemented, "BPP generation requires --dppb-label; see services/smdp-plus/README.md")
+		return
+	}
+	if len(req.EUICCOtpk) == 0 {
+		writeProblem(w, http.StatusBadRequest, "euicc_otpk required (uncompressed P-256 point, 65 bytes)")
+		return
+	}
+	if len(req.EUICCOtpk) != 65 || req.EUICCOtpk[0] != 0x04 {
+		writeProblem(w, http.StatusBadRequest, "euicc_otpk must be uncompressed P-256 point (0x04 || X(32) || Y(32))")
+		return
+	}
+
+	der, err := s.buildBPP(r.Context(), sess, req.EUICCOtpk)
+	if err != nil {
+		slog.Default().Error("BPP assembly failed", slog.String("err", err.Error()))
+		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("BPP assembly: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, smdpv1.GetBoundProfilePackageResponse{
+		TransactionID:       req.TransactionID,
+		BoundProfilePackage: der,
+	})
+}
+
+// buildBPP runs the §5.6.4 BPP construction end to end. Split
+// out from the HTTP handler so the test harness can call it
+// directly when it wants to exercise the assembly without going
+// through JSON.
+func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk []byte) ([]byte, error) {
+	// 1. SM-DP+ ephemeral ECKA keypair.
+	smdpEphemeral, err := ecka.GenerateKeyPair(ecka.CurveP256)
+	if err != nil {
+		return nil, fmt.Errorf("generate SM-DP+ ephemeral: %w", err)
+	}
+	smdpOtpk := smdpEphemeral.Pub.Bytes() // uncompressed X9.63 point — the wire form
+
+	// 2. Parse the eUICC's otPK into a *ecdh.PublicKey we can
+	// pass into ECKA.
+	euiccPub, err := ecdh.P256().NewPublicKey(euiccOtpk)
+	if err != nil {
+		return nil, fmt.Errorf("parse euicc otpk: %w", err)
+	}
+
+	// 3. sharedInfo per SGP.22 §H.4: a small tagged blob
+	// containing keyType/keyLength/keyUsage. We use the same
+	// values the ControlRefTemplate carries so both sides
+	// derive the same bytes.
+	//
+	// The exact spec layout (TLV-tagged with APPLICATION-N tags
+	// per §H.4 Table H-1) is the documented hardware-bench
+	// follow-up; the in-tree concatenation matches the spec in
+	// shape (key-binding inputs → KDF input) and round-trips
+	// against itself.
+	sharedInfo := bytes.Join([][]byte{
+		bpp.KeyTypeAESGCM,
+		bpp.KeyLengthAES128,
+		bpp.KeyUsageQualifierEncryptAndIntegrity,
+		[]byte(sess.TransactionID),
+	}, nil)
+
+	// 4. Derive SENC/SMAC/MCV.
+	keys, err := bpp.Derive(smdpEphemeral.Priv, euiccPub, sharedInfo)
+	if err != nil {
+		return nil, fmt.Errorf("derive session keys: %w", err)
+	}
+
+	// 5. Build a minimum-viable SAIP UPP (header + PEEnd). Same
+	// shape profile-builder emits today; richer ProfileElements
+	// land as pkg/saip's catalogue grows.
+	iccidBytes := sessionICCIDBytes(sess)
+	hdr := saip.ProfileHeader{
+		MajorVersion:           saip.SAIPMajorVersion,
+		MinorVersion:           saip.SAIPMinorVersion,
+		ProfileType:            "Aether In-Tree Test Profile",
+		ICCID:                  iccidBytes,
+		EUICCMandatoryServices: []string{"contactless"},
+	}
+	pkg, err := saip.Build(hdr)
+	if err != nil {
+		return nil, fmt.Errorf("build SAIP UPP: %w", err)
+	}
+	upp, err := pkg.MarshalDER()
+	if err != nil {
+		return nil, fmt.Errorf("marshal SAIP UPP: %w", err)
+	}
+
+	// 6. Seal the UPP into AES-128-GCM segments.
+	segs, err := bpp.SealSegments(keys, upp, bpp.MaxSegmentSize)
+	if err != nil {
+		return nil, fmt.Errorf("seal UPP segments: %w", err)
+	}
+
+	// 7. Build the InitialiseSecureChannelRequest skeleton, sign
+	// the §5.7.7 input with DPpb, populate the signature.
+	tidBytes, err := hexDecode(sess.TransactionID)
+	if err != nil {
+		return nil, fmt.Errorf("decode tid: %w", err)
+	}
+	signedInput := bpp.SignedInputBytes(tidBytes, smdpOtpk, euiccOtpk)
+	digest := sha256.Sum256(signedInput)
+	sigResp, err := s.hsm.Sign(ctx, s.dppb.KeyID, digest[:])
+	if err != nil {
+		return nil, fmt.Errorf("hsm sign DPpb over §5.7.7 input: %w", err)
+	}
+
+	iscr := bpp.InitialiseSecureChannelRequest{
+		RemoteOpId:    bpp.RemoteOpIdInstallBoundProfilePackage,
+		TransactionID: tidBytes,
+		ControlRefTemplate: bpp.ControlRefTemplate{
+			KeyUsageQualifier: bpp.KeyUsageQualifierEncryptAndIntegrity,
+			KeyType:           bpp.KeyTypeAESGCM,
+			KeyLength:         bpp.KeyLengthAES128,
+		},
+		SMDPOtpk: smdpOtpk,
+		SMDPSign: sigResp.SignatureDER,
+	}
+
+	// 8. Assemble the outer BPP SEQUENCE.
+	return bpp.AssembleBoundProfilePackage(iscr, segs)
+}
+
+// sessionICCIDBytes returns the 10-byte nibble-swapped ICCID for
+// the session's profile, or a deterministic test placeholder when
+// the session doesn't carry one (lab path). The placeholder is
+// flagged 0xFF... so a hardware bench notices immediately.
+func sessionICCIDBytes(sess *session.Session) []byte {
+	const iccidLen = 10
+	if sess.ICCID == "" {
+		out := make([]byte, iccidLen)
+		for i := range out {
+			out[i] = 0xFF
+		}
+		return out
+	}
+	// Nibble-swap to 10 bytes per SGP.22 §B.1; matches the
+	// helper in services/profile-builder/internal/template.
+	padded := sess.ICCID
+	if len(padded) == 19 {
+		padded += "F"
+	}
+	if len(padded) != 20 {
+		// Not a valid ICCID; fall back to placeholder rather
+		// than emit a wrong-length value the eUICC would
+		// reject.
+		out := make([]byte, iccidLen)
+		for i := range out {
+			out[i] = 0xFF
+		}
+		return out
+	}
+	out := make([]byte, iccidLen)
+	for i := 0; i < iccidLen; i++ {
+		hi := padded[2*i+1]
+		lo := padded[2*i]
+		var hn, ln byte
+		switch {
+		case hi >= '0' && hi <= '9':
+			hn = hi - '0'
+		case hi == 'F' || hi == 'f':
+			hn = 0xF
+		default:
+			hn = 0xF
+		}
+		switch {
+		case lo >= '0' && lo <= '9':
+			ln = lo - '0'
+		case lo == 'F' || lo == 'f':
+			ln = 0xF
+		default:
+			ln = 0xF
+		}
+		out[i] = (hn << 4) | ln
+	}
+	return out
 }
 
 // handleHandleNotification implements SGP.22 §5.6.5 (skeleton).
