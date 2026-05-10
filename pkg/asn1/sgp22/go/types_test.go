@@ -69,7 +69,9 @@ func TestPEHeader_TrailingBytesRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	garbage := append(encoded, 0xFF, 0xFF)
+	garbage := make([]byte, 0, len(encoded)+2)
+	garbage = append(garbage, encoded...)
+	garbage = append(garbage, 0xFF, 0xFF)
 	if _, err := UnmarshalPEHeader(garbage); err == nil {
 		t.Fatal("expected error on trailing bytes, got nil")
 	}
