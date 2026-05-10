@@ -48,9 +48,9 @@ type Broker interface {
 // Common errors backends should return so the HTTP layer can map them
 // to consistent status codes.
 var (
-	ErrKeyNotFound       = errors.New("hsm: key not found")
-	ErrUnsupportedCurve  = errors.New("hsm: unsupported curve")
-	ErrUnsupportedKind   = errors.New("hsm: unsupported key kind")
-	ErrInvalidArgument   = errors.New("hsm: invalid argument")
-	ErrBackendUnhealthy  = errors.New("hsm: backend not ready")
+	ErrKeyNotFound      = errors.New("hsm: key not found")
+	ErrUnsupportedCurve = errors.New("hsm: unsupported curve")
+	ErrUnsupportedKind  = errors.New("hsm: unsupported key kind")
+	ErrInvalidArgument  = errors.New("hsm: invalid argument")
+	ErrBackendUnhealthy = errors.New("hsm: backend not ready")
 )

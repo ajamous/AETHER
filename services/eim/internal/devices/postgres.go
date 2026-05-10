@@ -257,12 +257,12 @@ type rowScanner interface {
 
 func scanDevice(r rowScanner) (*eimv1.Device, error) {
 	var (
-		eid       string
-		label     string
-		tags      []string
-		metaRaw   []byte
-		regAt     time.Time
-		lastSeen  *time.Time
+		eid      string
+		label    string
+		tags     []string
+		metaRaw  []byte
+		regAt    time.Time
+		lastSeen *time.Time
 	)
 	if err := r.Scan(&eid, &label, &tags, &metaRaw, &regAt, &lastSeen); err != nil {
 		return nil, err

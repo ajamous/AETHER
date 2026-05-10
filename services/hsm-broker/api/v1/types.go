@@ -89,7 +89,7 @@ type ListKeysResponse struct {
 type HealthRequest struct{}
 
 type HealthResponse struct {
-	Ready           bool   `json:"ready"`
-	Backend         string `json:"backend"`
-	ActiveSessions  uint32 `json:"active_sessions"`
+	Ready          bool   `json:"ready"`
+	Backend        string `json:"backend"`
+	ActiveSessions uint32 `json:"active_sessions"`
 }

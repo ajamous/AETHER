@@ -43,11 +43,11 @@ func TestServerSigned1_RoundTrip(t *testing.T) {
 
 func TestServerSigned1_ValidationCatches(t *testing.T) {
 	cases := map[string]ServerSigned1{
-		"empty txid":     {EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 16), ServerAddress: "x"},
-		"long txid":      {TransactionID: bytes.Repeat([]byte{1}, 17), EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 16), ServerAddress: "x"},
-		"short euicc":    {TransactionID: []byte{1}, EUICCChallenge: bytes.Repeat([]byte{1}, 8), ServerChallenge: bytes.Repeat([]byte{2}, 16), ServerAddress: "x"},
-		"empty address":  {TransactionID: []byte{1}, EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 16)},
-		"short server":   {TransactionID: []byte{1}, EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 8), ServerAddress: "x"},
+		"empty txid":    {EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 16), ServerAddress: "x"},
+		"long txid":     {TransactionID: bytes.Repeat([]byte{1}, 17), EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 16), ServerAddress: "x"},
+		"short euicc":   {TransactionID: []byte{1}, EUICCChallenge: bytes.Repeat([]byte{1}, 8), ServerChallenge: bytes.Repeat([]byte{2}, 16), ServerAddress: "x"},
+		"empty address": {TransactionID: []byte{1}, EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 16)},
+		"short server":  {TransactionID: []byte{1}, EUICCChallenge: bytes.Repeat([]byte{1}, 16), ServerChallenge: bytes.Repeat([]byte{2}, 8), ServerAddress: "x"},
 	}
 	for name, p := range cases {
 		t.Run(name, func(t *testing.T) {

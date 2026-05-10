@@ -11,11 +11,11 @@ import (
 func TestHistogram_BucketAndCountAndSum(t *testing.T) {
 	h := NewLatencyHistogram("test_latency_seconds", "test")
 	for _, d := range []time.Duration{
-		2 * time.Millisecond,    // <= 5ms
-		8 * time.Millisecond,    // <= 10ms
-		20 * time.Millisecond,   // <= 25ms
-		300 * time.Millisecond,  // <= 500ms
-		3 * time.Second,         // > 2.5s; only +Inf
+		2 * time.Millisecond,   // <= 5ms
+		8 * time.Millisecond,   // <= 10ms
+		20 * time.Millisecond,  // <= 25ms
+		300 * time.Millisecond, // <= 500ms
+		3 * time.Second,        // > 2.5s; only +Inf
 	} {
 		h.Observe(d)
 	}

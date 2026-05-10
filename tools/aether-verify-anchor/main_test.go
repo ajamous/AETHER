@@ -22,10 +22,10 @@ import (
 // JSON anchor — the same shape the audit service's /v1/anchor
 // emits in production.
 type fixture struct {
-	priv      *ecdsa.PrivateKey
-	pubPath   string
-	anchor    map[string]any
-	tmpDir    string
+	priv    *ecdsa.PrivateKey
+	pubPath string
+	anchor  map[string]any
+	tmpDir  string
 }
 
 func newFixture(t *testing.T, length int64, tailHash []byte) *fixture {

@@ -38,18 +38,18 @@ const (
 
 // Command is a queued operation for a device.
 type Command struct {
-	ID           string       `json:"id"`
-	EID          EID          `json:"eid"`
-	Kind         CommandKind  `json:"kind"`
-	SMDPAddress  string       `json:"smdp_address,omitempty"`
-	MatchingID   string       `json:"matching_id,omitempty"`
-	ICCID        string       `json:"iccid,omitempty"`
-	State        CommandState `json:"state"`
-	CreatedAt    time.Time    `json:"created_at"`
-	DeliveredAt  *time.Time   `json:"delivered_at,omitempty"`
-	CompletedAt  *time.Time   `json:"completed_at,omitempty"`
-	FailureCode  string       `json:"failure_code,omitempty"`
-	FailureNote  string       `json:"failure_note,omitempty"`
+	ID          string       `json:"id"`
+	EID         EID          `json:"eid"`
+	Kind        CommandKind  `json:"kind"`
+	SMDPAddress string       `json:"smdp_address,omitempty"`
+	MatchingID  string       `json:"matching_id,omitempty"`
+	ICCID       string       `json:"iccid,omitempty"`
+	State       CommandState `json:"state"`
+	CreatedAt   time.Time    `json:"created_at"`
+	DeliveredAt *time.Time   `json:"delivered_at,omitempty"`
+	CompletedAt *time.Time   `json:"completed_at,omitempty"`
+	FailureCode string       `json:"failure_code,omitempty"`
+	FailureNote string       `json:"failure_note,omitempty"`
 }
 
 // --- request/response shapes ---------------------------------------------

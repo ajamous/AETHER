@@ -109,10 +109,10 @@ func (s *PGStore) Get(tid string) (*Session, error) {
 		   FROM smdpp_sessions
 		  WHERE transaction_id = $1`, tid)
 	var (
-		sess          Session
-		state         string
-		matchingID    string
-		iccid         string
+		sess       Session
+		state      string
+		matchingID string
+		iccid      string
 	)
 	if err := row.Scan(
 		&sess.TransactionID, &state,

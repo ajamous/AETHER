@@ -20,8 +20,8 @@ import (
 // Layout: a self-signed CI root, an EUM intermediate, and three
 // leaf identity certs (DPtls, DPauth, DPpb) issued by the EUM.
 type LabChain struct {
-	RootPEM   []byte
-	EUMPEM    []byte
+	RootPEM     []byte
+	EUMPEM      []byte
 	IdentityPEM map[Identity][]byte
 }
 

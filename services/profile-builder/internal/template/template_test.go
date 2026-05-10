@@ -76,10 +76,10 @@ func TestBuildUPP_HappyPath(t *testing.T) {
 func TestBuildUPP_RejectsBadIMSI(t *testing.T) {
 	p, _ := Parse([]byte(sampleYAML))
 	sub := &SubscriberData{
-		IMSI: "abc",
+		IMSI:  "abc",
 		ICCID: "8900000000000000001",
-		Ki: bytes.Repeat([]byte{0}, 16),
-		OPc: bytes.Repeat([]byte{0}, 16),
+		Ki:    bytes.Repeat([]byte{0}, 16),
+		OPc:   bytes.Repeat([]byte{0}, 16),
 	}
 	if _, err := BuildUPP(p, sub); err == nil {
 		t.Fatal("expected error on bad IMSI")

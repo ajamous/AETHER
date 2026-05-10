@@ -28,15 +28,15 @@ import (
 // fake HSM broker that signs with a real ECDSA key, then drives the
 // full pipeline:
 //
-//   1. SM-DP+ "starts up" by generating a DPauth keypair via the fake
-//      broker (real ECDSA P-256 key on the broker side).
-//   2. SM-DP+ self-signs an X.509 cert wrapping the public key.
-//   3. LPA hits initiateAuthentication.
-//   4. SM-DP+ builds ServerSigned1, asks the broker to sign the digest.
-//   5. SM-DP+ returns ServerSigned1 + ServerSignature1 + ServerCertificate.
-//   6. LPA-side verifier (this test) extracts the public key from the
-//      cert, recomputes the digest over ServerSigned1, and verifies
-//      the signature with stdlib ECDSA.
+//  1. SM-DP+ "starts up" by generating a DPauth keypair via the fake
+//     broker (real ECDSA P-256 key on the broker side).
+//  2. SM-DP+ self-signs an X.509 cert wrapping the public key.
+//  3. LPA hits initiateAuthentication.
+//  4. SM-DP+ builds ServerSigned1, asks the broker to sign the digest.
+//  5. SM-DP+ returns ServerSigned1 + ServerSignature1 + ServerCertificate.
+//  6. LPA-side verifier (this test) extracts the public key from the
+//     cert, recomputes the digest over ServerSigned1, and verifies
+//     the signature with stdlib ECDSA.
 //
 // If any link in the chain is wrong (DER encoding off, wrong digest,
 // wrong key id, etc.), this test fails.

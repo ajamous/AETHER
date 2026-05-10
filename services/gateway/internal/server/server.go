@@ -26,7 +26,6 @@ import (
 	"github.com/ajamous/aether/services/gateway/internal/tlsconf"
 )
 
-
 type Server struct {
 	profileBuilder string
 	smdpPlus       string

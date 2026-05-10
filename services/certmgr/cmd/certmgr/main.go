@@ -25,14 +25,14 @@ func main() {
 
 func run() error {
 	var (
-		mode           = flag.String("mode", "lab", "lab | production")
-		trustStore     = flag.String("trust-store", "", "PEM file of CI roots")
-		intermediates  = flag.String("intermediates", "", "PEM bundle of intermediates (optional, e.g. EUM)")
-		dpTLS          = flag.String("dp-tls-cert", "", "DPtls certificate PEM (optional)")
-		dpAuth         = flag.String("dp-auth-cert", "", "DPauth certificate PEM (optional)")
-		dpPb           = flag.String("dp-pb-cert", "", "DPpb certificate PEM (optional)")
-		listen         = flag.String("listen", ":8444", "HTTP listen address")
-		generateLab    = flag.String("generate-lab", "", "if set, write a fresh lab chain to this directory and exit (lab mode only)")
+		mode          = flag.String("mode", "lab", "lab | production")
+		trustStore    = flag.String("trust-store", "", "PEM file of CI roots")
+		intermediates = flag.String("intermediates", "", "PEM bundle of intermediates (optional, e.g. EUM)")
+		dpTLS         = flag.String("dp-tls-cert", "", "DPtls certificate PEM (optional)")
+		dpAuth        = flag.String("dp-auth-cert", "", "DPauth certificate PEM (optional)")
+		dpPb          = flag.String("dp-pb-cert", "", "DPpb certificate PEM (optional)")
+		listen        = flag.String("listen", ":8444", "HTTP listen address")
+		generateLab   = flag.String("generate-lab", "", "if set, write a fresh lab chain to this directory and exit (lab mode only)")
 	)
 	flag.Parse()
 

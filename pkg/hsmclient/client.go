@@ -197,7 +197,9 @@ func (c *Client) do(ctx context.Context, method, path string, body any, dst any)
 	defer resp.Body.Close()
 
 	if resp.StatusCode/100 != 2 {
-		var prob struct{ Detail string `json:"detail"` }
+		var prob struct {
+			Detail string `json:"detail"`
+		}
 		_ = json.NewDecoder(resp.Body).Decode(&prob)
 		if prob.Detail == "" {
 			prob.Detail = http.StatusText(resp.StatusCode)
