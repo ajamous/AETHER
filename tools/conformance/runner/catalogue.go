@@ -245,9 +245,21 @@ var catalogue = []Case{
 	},
 	{
 		Family: "ES9+",
-		Title:  "GetBoundProfilePackage honestly returns 501 (BPP pending SAIP codec)",
+		Title:  "GetBoundProfilePackage returns honest 501 in lab mode (no DPpb configured)",
 		Module: "services/smdp-plus", Package: "./internal/server/...",
 		RunPattern: "^TestGetBoundProfilePackage_ReturnsNotImplemented$",
+	},
+	{
+		Family: "ES9+",
+		Title:  "GetBoundProfilePackage happy path: DPpb-wired flow returns a real BPP DER",
+		Module: "services/smdp-plus", Package: "./internal/server/...",
+		RunPattern: "^TestGetBoundProfilePackage_HappyPath$",
+	},
+	{
+		Family: "ES9+",
+		Title:  "GetBoundProfilePackage rejects missing/malformed eUICC otpk (400, not partial BPP)",
+		Module: "services/smdp-plus", Package: "./internal/server/...",
+		RunPattern: "^TestGetBoundProfilePackage_RejectsMissingEuiccOtpk$",
 	},
 	{
 		Family: "ES9+",

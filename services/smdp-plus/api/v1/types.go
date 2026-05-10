@@ -67,8 +67,19 @@ type AuthenticateClientResponse struct {
 
 // GetBoundProfilePackageRequest — SGP.22 §5.6.4.
 type GetBoundProfilePackageRequest struct {
-	TransactionID                  string `json:"transaction_id"`
-	PrepareDownloadResponse        []byte `json:"prepare_download_response"`
+	TransactionID           string `json:"transaction_id"`
+	PrepareDownloadResponse []byte `json:"prepare_download_response"`
+
+	// EUICCOtpk is the eUICC's ephemeral public key for ECKA,
+	// uncompressed X9.63 point form (0x04 || X || Y, 65 bytes for
+	// P-256). In SGP.22's full flow this is parsed out of the
+	// signed PrepareDownloadResponse blob and the parsed bytes
+	// are signature-verified against the eUICC cert from
+	// AuthenticateClient; until that parser+verifier lands,
+	// callers (and the in-tree test harness) supply EUICCOtpk
+	// directly. The handler validates length + first-byte before
+	// using it for ECKA.
+	EUICCOtpk []byte `json:"euicc_otpk,omitempty"`
 }
 
 // GetBoundProfilePackageResponse — SGP.22 §5.6.4.
