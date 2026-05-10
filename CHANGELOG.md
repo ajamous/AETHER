@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+`SmdpSigned2` codec + DPpb sign helper
+(`services/smdp-plus/internal/signing/smdp_signed2.go`):
+- Closes the next layer of the BPP critical path. Earlier PRs
+  shipped `pkg/saip` (the UPP layer) and the doc-vs-catalogue
+  refresh that documented the remaining steps; this PR ships
+  the SGP.22 §5.7.14 SmdpSigned2 SEQUENCE that
+  `prepareDownload` will sign over.
+- New `SmdpSigned2` Go type mirrors the spec exactly:
+  `transactionId` (1..16 bytes), `ccRequiredFlag` BOOLEAN,
+  `bppEuiccOtpk` `[APPLICATION 73] OCTET STRING OPTIONAL`. The
+  APPLICATION-73 tag is the one SGP.22 quirk; the rest uses
+  `encoding/asn1` defaults.
+- `MarshalDER` enforces every spec invariant before emitting
+  bytes (transactionId range, otpk length 33/65 only, otpk
+  first-byte 0x02/0x03 for compressed and 0x04 for uncompressed
+  P-256 points). `UnmarshalSmdpSigned2` rejects trailing bytes.
+- `SignSmdpSigned2` follows the established pattern from
+  `ServerSigned1` and the audit-anchor codec: DER → SHA-256 →
+  hsm-broker `Sign` against the **DPpb** key (distinct from
+  DPauth — separate ceremony lifecycle, separate rotation
+  cadence per the SAS-SM key-ceremony procedure).
+- 6 unit tests cover the round-trip in three shapes (no otpk,
+  compressed otpk, uncompressed otpk), every `validate()`
+  rejection (empty / oversized tid, wrong-length otpk,
+  bad-first-byte for compressed and uncompressed), trailing-
+  byte rejection on Unmarshal, and a fake-broker end-to-end
+  signing test that ECDSA-verifies against the broker's public
+  key + round-trips the signed payload to confirm fields don't
+  drift between sign and verify.
+- 3 conformance harness cases added (round-trip, validation,
+  end-to-end signing). 69 cases total now (was 66).
+
+Status row updates:
+- `services/smdp-plus`: caveat tightened. Now lists
+  `SmdpSigned2` codec + DPpb sign helper alongside the existing
+  ServerSigned1 / EuiccSigned1 capabilities. The
+  `getBoundProfilePackage`-returns-501 caveat is unchanged but
+  the documented critical path is now smaller — the remaining
+  work is the `prepareDownload` HTTP handler + BPP wrapping
+  (ECKA + KDF + AES-GCM segmentation around the SAIP UPP).
+- Coverage matrix: ES9+ section gains 3 SmdpSigned2 rows. The
+  GetBoundProfilePackage row's "remaining work" list shortened
+  by one item. 66 → 69 cases.
+
 Conformance coverage matrix refresh
 (`tools/conformance/coverage/sgp23.md`):
 - Closes a doc-vs-catalogue drift gap created by the previous

@@ -54,7 +54,10 @@ internal).
 | EuiccSigned1 chain validation              | Automated | `services/smdp-plus/internal/signing/euicc_test.go::TestVerify_HappyPath` plus 4 negative cases |
 | EuiccSigned1 server-challenge replay defense | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsWrongServerChallenge` |
 | EuiccSigned1 unknown CI rejection          | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsEUICCFromUnknownCI` |
-| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). The SAIP UPP that BPP wraps now lands via `pkg/saip` (see SAIP section below); the remaining work is the smdp-plus BPP wrapping itself (ECKA + KDF + AES-128-GCM segmentation + InitialiseSecureChannelRequest signed with DPpb) |
+| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). The SAIP UPP that BPP wraps now lands via `pkg/saip` (see SAIP section below). The DPpb signing path also lands via `SmdpSigned2` (§5.7.14, see "SmdpSigned2" rows below); remaining work is the `prepareDownload` HTTP handler + the BPP wrapping itself (ECKA + KDF + AES-128-GCM segmentation + InitialiseSecureChannelRequest signed with DPpb over the captured eUICC otPK) |
+| SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed) | Automated | `services/smdp-plus/internal/signing/smdp_signed2_test.go::TestSmdpSigned2_RoundTrip*` |
+| SmdpSigned2 validation rejects bad transactionId + bppEuiccOtpk shapes | Automated | `TestSmdpSigned2_ValidationCatches`     |
+| SmdpSigned2 signature verifies end-to-end (DPpb path)   | Automated | `TestSignSmdpSigned2_VerifiesEndToEnd`     |
 | HandleNotification                         | Automated | `services/smdp-plus/.../server_test.go::TestHandleNotification_HappyPath` |
 
 ## ES8+ — Application protocol payload
@@ -180,7 +183,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **66 cases across 10 families** (ES2+, ES9+,
+summary. Today: **69 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in

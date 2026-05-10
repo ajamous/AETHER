@@ -179,6 +179,24 @@ var catalogue = []Case{
 	},
 	{
 		Family: "ES9+",
+		Title:  "SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed)",
+		Module: "services/smdp-plus", Package: "./internal/signing/...",
+		RunPattern: "^TestSmdpSigned2_RoundTrip",
+	},
+	{
+		Family: "ES9+",
+		Title:  "SmdpSigned2 validation rejects malformed transactionId + bppEuiccOtpk shapes",
+		Module: "services/smdp-plus", Package: "./internal/signing/...",
+		RunPattern: "^TestSmdpSigned2_ValidationCatches$",
+	},
+	{
+		Family: "ES9+",
+		Title:  "SmdpSigned2 signature verifies end-to-end against the broker public key",
+		Module: "services/smdp-plus", Package: "./internal/signing/...",
+		RunPattern: "^TestSignSmdpSigned2_VerifiesEndToEnd$",
+	},
+	{
+		Family: "ES9+",
 		Title:  "InitiateAuthentication signature verifies end-to-end",
 		Module: "services/smdp-plus", Package: "./internal/server/...",
 		RunPattern: "^TestInitiateAuthentication_SignatureVerifies$",
