@@ -1,7 +1,7 @@
 // Package saip implements the SGP.22 §B (TCA SAIP v2.x) Subscription
 // Manager Application for Profile codec.
 //
-// Scope of this package today
+// # Scope of this package today
 //
 // This is the minimum-viable subset of the SGP.22 SAIP profile
 // package: enough to assemble + decode a syntactically valid
@@ -18,7 +18,7 @@
 // as a separate type behind the same CHOICE wire shape, so adding
 // them does not change how callers assemble a ProfilePackage.
 //
-// Why hand-rolled
+// # Why hand-rolled
 //
 // Aether's plan philosophy avoids GPL-encumbered upstream ASN.1
 // modules. The SGP.22 spec text is the source of truth for these
@@ -26,7 +26,7 @@
 // the implicit/explicit tags called out per §B. A round-trip test
 // per type is the contract.
 //
-// Wire format
+// # Wire format
 //
 // Encoding is DER per X.690 (`encoding/asn1` defaults). Every
 // ProfileElement is tagged with its CHOICE alternative's
@@ -73,11 +73,11 @@ const (
 // spec are deliberately omitted in this minimum-viable subset;
 // they land in a follow-up PR.
 type ProfileHeader struct {
-	MajorVersion             int
-	MinorVersion             int
-	ProfileType              string   `asn1:"utf8"`
-	ICCID                    []byte   // 10 octets, nibble-swapped per SGP.22 §B.1
-	EUICCMandatoryServices   []string `asn1:"sequence"`
+	MajorVersion           int
+	MinorVersion           int
+	ProfileType            string   `asn1:"utf8"`
+	ICCID                  []byte   // 10 octets, nibble-swapped per SGP.22 §B.1
+	EUICCMandatoryServices []string `asn1:"sequence"`
 }
 
 // PEEnd is the SGP.22 §B.X end-of-package marker — an empty SEQUENCE.

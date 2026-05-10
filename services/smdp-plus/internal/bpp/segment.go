@@ -6,7 +6,7 @@
 // 128-bit GCM tag is the MAC, and the previous segment's tag feeds
 // into the next segment's AAD ("MAC chaining vector" / MCV).
 //
-// What this file ships
+// # What this file ships
 //
 // `SealSegments` takes the SAIP UPP plaintext + the SessionKeys from
 // `Derive` and returns one ciphertext-with-tag slice per segment,
@@ -15,7 +15,7 @@
 // same keys — used by tests today, and by an audit/replay tool in
 // the future.
 //
-// What this file does NOT ship
+// # What this file does NOT ship
 //
 // The exact byte layout SGP.22 §H.3 specifies for the per-segment
 // AAD (counter encoding, tag bits, ICV-as-AAD framing) is more

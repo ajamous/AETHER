@@ -22,11 +22,11 @@ type InitiateAuthenticationRequest struct {
 
 // InitiateAuthenticationResponse — SGP.22 §5.6.1.
 type InitiateAuthenticationResponse struct {
-	TransactionID    string `json:"transaction_id"`
-	ServerSigned1    []byte `json:"server_signed1"`
-	ServerSignature1 []byte `json:"server_signature1"`
+	TransactionID       string `json:"transaction_id"`
+	ServerSigned1       []byte `json:"server_signed1"`
+	ServerSignature1    []byte `json:"server_signature1"`
 	EuiccCiPKIDToBeUsed []byte `json:"euicc_ci_pkid_to_be_used"`
-	ServerCertificate []byte `json:"server_certificate"`
+	ServerCertificate   []byte `json:"server_certificate"`
 }
 
 // AuthenticateClientRequest — SGP.22 §5.6.3.
@@ -58,10 +58,10 @@ type AuthenticateClientRequest struct {
 
 // AuthenticateClientResponse — SGP.22 §5.6.3.
 type AuthenticateClientResponse struct {
-	TransactionID  string `json:"transaction_id"`
+	TransactionID   string `json:"transaction_id"`
 	ProfileMetadata []byte `json:"profile_metadata"`
-	SMDPSigned2    []byte `json:"smdp_signed2"`
-	SMDPSignature2 []byte `json:"smdp_signature2"`
+	SMDPSigned2     []byte `json:"smdp_signed2"`
+	SMDPSignature2  []byte `json:"smdp_signature2"`
 	SMDPCertificate []byte `json:"smdp_certificate"`
 }
 
@@ -84,8 +84,8 @@ type GetBoundProfilePackageRequest struct {
 
 // GetBoundProfilePackageResponse — SGP.22 §5.6.4.
 type GetBoundProfilePackageResponse struct {
-	TransactionID         string `json:"transaction_id"`
-	BoundProfilePackage   []byte `json:"bound_profile_package"`
+	TransactionID       string `json:"transaction_id"`
+	BoundProfilePackage []byte `json:"bound_profile_package"`
 }
 
 // HandleNotificationRequest — SGP.22 §5.6.5.

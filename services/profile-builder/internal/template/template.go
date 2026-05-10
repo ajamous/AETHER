@@ -56,10 +56,10 @@ type Profile struct {
 	Version     string `yaml:"version" json:"version"`
 
 	Network struct {
-		MCC        string `yaml:"mcc" json:"mcc"`
-		MNC        string `yaml:"mnc" json:"mnc"`
-		PLMNName  string `yaml:"plmn_name" json:"plmn_name"`
-		HPLMNAct   string `yaml:"hplmn_act" json:"hplmn_act"`
+		MCC      string `yaml:"mcc" json:"mcc"`
+		MNC      string `yaml:"mnc" json:"mnc"`
+		PLMNName string `yaml:"plmn_name" json:"plmn_name"`
+		HPLMNAct string `yaml:"hplmn_act" json:"hplmn_act"`
 	} `yaml:"network" json:"network"`
 
 	NAA struct {
@@ -79,11 +79,11 @@ type Profile struct {
 // SubscriberData is the per-activation data merged with a Profile to
 // produce a UPP.
 type SubscriberData struct {
-	IMSI    string `json:"imsi"`
-	ICCID   string `json:"iccid"`
-	MSISDN  string `json:"msisdn"`
-	Ki      []byte `json:"ki"`
-	OPc     []byte `json:"opc"`
+	IMSI   string `json:"imsi"`
+	ICCID  string `json:"iccid"`
+	MSISDN string `json:"msisdn"`
+	Ki     []byte `json:"ki"`
+	OPc    []byte `json:"opc"`
 }
 
 // Loader reads templates from a directory.

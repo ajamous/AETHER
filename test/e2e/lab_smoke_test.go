@@ -180,9 +180,9 @@ func TestLab_SMDPInitiateAuthentication_SignatureVerifies(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 	var got struct {
-		TransactionID    string `json:"transaction_id"`
-		ServerSigned1    []byte `json:"server_signed1"`
-		ServerSignature1 []byte `json:"server_signature1"`
+		TransactionID     string `json:"transaction_id"`
+		ServerSigned1     []byte `json:"server_signed1"`
+		ServerSignature1  []byte `json:"server_signature1"`
 		ServerCertificate []byte `json:"server_certificate"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {

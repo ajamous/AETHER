@@ -14,8 +14,8 @@ package memory
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/ecdh"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"

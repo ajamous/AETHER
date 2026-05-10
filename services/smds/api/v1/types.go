@@ -18,10 +18,10 @@ type EID string
 // at SMDPAddress". Once the LPA discovers it via ES11 and successfully
 // downloads, the SM-DP+ is expected to call DeleteEventRequest.
 type RegisterEventRequest struct {
-	EID         EID    `json:"eid"`
-	RSPServerAddress string `json:"rsp_server_address"`
-	EventID     string `json:"event_id"` // SM-DP+-allocated; idempotency key
-	ForwardingIndicator bool `json:"forwarding_indicator"`
+	EID                 EID    `json:"eid"`
+	RSPServerAddress    string `json:"rsp_server_address"`
+	EventID             string `json:"event_id"` // SM-DP+-allocated; idempotency key
+	ForwardingIndicator bool   `json:"forwarding_indicator"`
 }
 
 // RegisterEventResponse — SGP.22 §5.5.1.
@@ -49,9 +49,9 @@ type AuthenticateClientRequest struct {
 
 // AuthenticateClientResponse — SGP.22 §5.5.4.
 type AuthenticateClientResponse struct {
-	TransactionID    string `json:"transaction_id"`
-	ServerSigned1    []byte `json:"server_signed1"`
-	ServerSignature1 []byte `json:"server_signature1"`
+	TransactionID     string `json:"transaction_id"`
+	ServerSigned1     []byte `json:"server_signed1"`
+	ServerSignature1  []byte `json:"server_signature1"`
 	ServerCertificate []byte `json:"server_certificate"`
 }
 

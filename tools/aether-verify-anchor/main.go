@@ -73,10 +73,10 @@ type anchorDER struct {
 }
 
 const (
-	exitOK         = 0
-	exitBadInput   = 1
-	exitBadSig     = 2
-	exitBadReplay  = 3
+	exitOK        = 0
+	exitBadInput  = 1
+	exitBadSig    = 2
+	exitBadReplay = 3
 )
 
 func main() {

@@ -58,8 +58,8 @@ type Store struct {
 
 // Config configures Store loading.
 type Config struct {
-	Mode            Mode
-	TrustStorePath  string
+	Mode           Mode
+	TrustStorePath string
 	// IntermediatesPath is an optional bundle (PEM, may contain multiple
 	// certs) of intermediate CA certs used to chain the identity certs
 	// up to the trust store. SGP.22 deployments typically have an EUM
@@ -71,11 +71,11 @@ type Config struct {
 // New loads certificates from disk per cfg and returns a verified Store.
 //
 // Verification:
-//   1. The trust store must contain at least one CA certificate.
-//   2. Every identity cert must verify against the trust store.
-//   3. (Caller responsibility) the configured mode must match the
-//      issuer set; the public ChainsVerify() helper exposes that
-//      check for the HTTP layer.
+//  1. The trust store must contain at least one CA certificate.
+//  2. Every identity cert must verify against the trust store.
+//  3. (Caller responsibility) the configured mode must match the
+//     issuer set; the public ChainsVerify() helper exposes that
+//     check for the HTTP layer.
 func New(cfg Config) (*Store, error) {
 	if cfg.Mode != ModeLab && cfg.Mode != ModeProduction {
 		return nil, fmt.Errorf("store: invalid mode %q", cfg.Mode)

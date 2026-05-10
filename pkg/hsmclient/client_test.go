@@ -66,9 +66,9 @@ func TestSign_PostsDigest(t *testing.T) {
 			return
 		}
 		var req struct {
-			KeyID     string  `json:"key_id"`
-			Digest    []byte  `json:"digest"`
-			DigestAlg string  `json:"digest_alg"`
+			KeyID     string `json:"key_id"`
+			Digest    []byte `json:"digest"`
+			DigestAlg string `json:"digest_alg"`
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 		if req.KeyID != "k1" || req.DigestAlg != "SHA256" || len(req.Digest) != 32 {

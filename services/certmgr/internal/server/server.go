@@ -67,27 +67,27 @@ func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
 // --- handlers -------------------------------------------------------------
 
 type certView struct {
-	Name           string    `json:"name"`
-	Subject        string    `json:"subject"`
-	Issuer         string    `json:"issuer"`
-	NotBefore      time.Time `json:"not_before"`
-	NotAfter       time.Time `json:"not_after"`
-	DaysUntilExpiry int      `json:"days_until_expiry"`
-	SerialNumber   string    `json:"serial_number"`
-	LoadedAt       time.Time `json:"loaded_at"`
+	Name            string    `json:"name"`
+	Subject         string    `json:"subject"`
+	Issuer          string    `json:"issuer"`
+	NotBefore       time.Time `json:"not_before"`
+	NotAfter        time.Time `json:"not_after"`
+	DaysUntilExpiry int       `json:"days_until_expiry"`
+	SerialNumber    string    `json:"serial_number"`
+	LoadedAt        time.Time `json:"loaded_at"`
 }
 
 func toView(c *store.Cert) certView {
 	d := int(time.Until(c.Cert.NotAfter).Hours() / 24)
 	return certView{
-		Name:           string(c.Name),
-		Subject:        c.Cert.Subject.String(),
-		Issuer:         c.Cert.Issuer.String(),
-		NotBefore:      c.Cert.NotBefore,
-		NotAfter:       c.Cert.NotAfter,
+		Name:            string(c.Name),
+		Subject:         c.Cert.Subject.String(),
+		Issuer:          c.Cert.Issuer.String(),
+		NotBefore:       c.Cert.NotBefore,
+		NotAfter:        c.Cert.NotAfter,
 		DaysUntilExpiry: d,
-		SerialNumber:   c.Cert.SerialNumber.String(),
-		LoadedAt:       c.LoadedAt,
+		SerialNumber:    c.Cert.SerialNumber.String(),
+		LoadedAt:        c.LoadedAt,
 	}
 }
 
@@ -106,11 +106,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	}
 	sort.Strings(expiringSoon)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ready":            len(identities) > 0,
-		"mode":             string(s.st.Mode()),
-		"identities":       len(identities),
-		"trust_store_size": len(s.st.Roots()),
-		"expiring_soon":    expiringSoon,
+		"ready":                len(identities) > 0,
+		"mode":                 string(s.st.Mode()),
+		"identities":           len(identities),
+		"trust_store_size":     len(s.st.Roots()),
+		"expiring_soon":        expiringSoon,
 		"earliest_expiry_days": earliest,
 	})
 }

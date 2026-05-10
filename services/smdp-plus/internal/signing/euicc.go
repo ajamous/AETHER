@@ -70,9 +70,9 @@ func UnmarshalEuiccSigned1(b []byte) (*EuiccSigned1, error) {
 
 // VerifyOptions configures eUICC chain + signature verification.
 type VerifyOptions struct {
-	Roots         *x509.CertPool   // CI roots from certmgr
-	Intermediates *x509.CertPool   // EUM intermediates from certmgr (optional; per-call ones still added below)
-	ServerAddress string           // expected serverAddress in EuiccSigned1
+	Roots         *x509.CertPool // CI roots from certmgr
+	Intermediates *x509.CertPool // EUM intermediates from certmgr (optional; per-call ones still added below)
+	ServerAddress string         // expected serverAddress in EuiccSigned1
 }
 
 // VerifyResult carries the parsed pieces a caller may want for
