@@ -19,7 +19,12 @@ internal).
   completeness; you certify those separately or rely on your
   device vendor.
 - **Pending** — automatable but blocked on a feature Aether
-  hasn't shipped (typically: SAIP codec / real BPP).
+  hasn't shipped. With the minimum-viable `pkg/saip` codec now
+  in tree, the remaining `Pending` rows in this matrix are
+  driven by either the smdp-plus BPP wrapping (ECKA + KDF +
+  AES-GCM segmentation around the SAIP UPP) or the
+  `pkg/saip` ProfileElement catalogue continuing to grow. Each
+  is called out explicitly in its row.
 
 ## ES2+ — BSS to SM-DP+
 
@@ -49,7 +54,7 @@ internal).
 | EuiccSigned1 chain validation              | Automated | `services/smdp-plus/internal/signing/euicc_test.go::TestVerify_HappyPath` plus 4 negative cases |
 | EuiccSigned1 server-challenge replay defense | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsWrongServerChallenge` |
 | EuiccSigned1 unknown CI rejection          | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsEUICCFromUnknownCI` |
-| GetBoundProfilePackage (BPP generation)    | Pending   | Returns 501 today; ships with the SAIP codec follow-up |
+| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). The SAIP UPP that BPP wraps now lands via `pkg/saip` (see SAIP section below); the remaining work is the smdp-plus BPP wrapping itself (ECKA + KDF + AES-128-GCM segmentation + InitialiseSecureChannelRequest signed with DPpb) |
 | HandleNotification                         | Automated | `services/smdp-plus/.../server_test.go::TestHandleNotification_HappyPath` |
 
 ## ES8+ — Application protocol payload
@@ -61,7 +66,7 @@ internal).
 | X9.63 KDF SHA-256                          | Automated | `pkg/crypto/kdf/x963_test.go` (NIST CAVP vector)  |
 | ECDSA over P-256                           | Automated | `pkg/crypto/ecdsa/ecdsa_test.go`                  |
 | Brainpool P-256 r1                         | Pending   | Stubbed; tracked for follow-up dependency vetting |
-| Full ProtectedProfilePackage framing       | Pending   | Ships with SAIP codec                             |
+| Full ProtectedProfilePackage framing       | Pending   | Ships with smdp-plus BPP wrapping (ECKA + X9.63-SHA-256 KDF + AES-128-GCM segmentation around the SAIP UPP). The UPP itself now lands via `pkg/saip` (see SAIP section below) |
 
 ## ES11 / ES12 — SM-DS
 
@@ -82,8 +87,31 @@ internal).
 | Command queue lifecycle      | Automated | same (enqueue → poll → ack)                       |
 | Idempotent duplicate-register rejection | Automated | `services/eim/.../server_test.go::TestEIM_RegisterRejectsDuplicate` |
 | IPA poll → command delivered | Automated | `services/eim/.../server_test.go::TestEIM_FleetLifecycle` |
-| IPAd direct profile fetch    | Pending   | Skeleton today; full flow needs the SAIP codec   |
+| IPAd direct profile fetch    | Pending   | Skeleton today; full flow lands as the `pkg/saip` ProfileElement catalogue grows + smdp-plus BPP wrapping ships |
 | IPAe (indirect) flow         | Not started | Phase 4 follow-up                                |
+
+## SAIP — SGP.22 §B Profile Package codec
+
+`pkg/saip` ships the minimum-viable subset of the SGP.22 §B
+Profile Package shape: `ProfileHeader` + `PEEnd`, with an
+`AppendRaw` seam for spare ProfileElements that lets the
+catalogue grow without changing call sites. Richer element
+types (`PE-USIM`, `PE-PinCodes`, `PE-FileSystem`,
+`PE-AKAParameter`, `PE-Application`, `PE-RFM`, …) land
+incrementally; each new type adds a dedicated row here.
+
+| Test family                                  | Coverage  | Aether test                                         |
+| -------------------------------------------- | --------- | --------------------------------------------------- |
+| ProfilePackage build + decode round-trip     | Automated | `pkg/saip/saip_test.go::TestBuild_Roundtrip`        |
+| ProfileHeader validation rejects all malformed shapes | Automated | `TestBuild_Validation` (subtests for major/minor out-of-range, empty profileType, wrong-length ICCID, missing mandatory services) |
+| Decode rejects trailing bytes / non-SEQUENCE / truncated | Automated | `TestDecode_Rejects*`                          |
+| AppendRaw inserts spare ProfileElement before PEEnd | Automated | `TestAppendRaw_InsertsBeforeEnd`                |
+| AppendRaw guards against pre-Build / empty inputs | Automated | `TestAppendRaw_RejectsBeforeBuild`, `TestAppendRaw_RejectsEmpty` |
+| DER encoding is byte-stable across invocations | Automated | `TestMarshalDER_StableAcrossInvocations`           |
+| profile-builder UPP emits valid SAIP DER (header decodes, fields match) | Automated | `services/profile-builder/.../template_test.go::TestBuildUPP_EmitsValidSAIP` |
+| ICCID nibble-swap matches SGP.22 §B.1 (20-digit + 19-digit-pad-F) | Automated | `TestEncodeICCIDNibbleSwapped` + `TestEncodeICCIDNibbleSwapped_Rejects` |
+| `PE-USIM` / `PE-PinCodes` / `PE-FileSystem` / `PE-AKAParameter` round-trips | Pending | Each lands as a separate row when the corresponding type ships |
+| Full SGP.22 reference profile decodes round-trip | Pending | Hardware-bench fixture; tracked under "Hardware tests" below |
 
 ## Audit / persistence behaviour
 
@@ -148,3 +176,12 @@ update the relevant row here. CI doesn't enforce this yet —
 the linter that checks `services/smdp-plus` for spec references
 is the analogous control on the SGP.22 side, and a similar
 linter for this matrix is a planned follow-up.
+
+The machine-readable catalogue lives at
+[`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
+`make conformance` runs every entry and prints a per-family
+summary. Today: **66 cases across 10 families** (ES2+, ES9+,
+ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
+Admin). When the two drift, the `go test`-driven catalogue is
+authoritative — humans update this human-readable matrix in
+the same PR.
