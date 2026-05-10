@@ -9,6 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+govulncheck in CI (`.github/workflows/ci.yml`, `Makefile`):
+- Closes the next layer of the supply-chain story. Dependabot
+  surfaces "a new version exists"; cosign + Sigstore prove "this
+  binary came from this build"; govulncheck closes the gap
+  between them by reporting **reachable** known vulnerabilities
+  in each Go module's call graph. False-positive rate is low
+  compared to a naive lockfile scan because govulncheck only
+  flags vulnerabilities in code paths the program actually
+  reaches.
+- New `govulncheck (per module)` CI job iterates the workspace
+  one `go.mod` at a time (the same pattern the build/test job
+  uses, since `./...` from the repo root doesn't expand across
+  module boundaries). Exit codes: 0 clean, 3 reachable vuln —
+  the job fails on 3 and tolerates "no packages matched" for
+  modules whose only files are behind a build tag (e.g.
+  `test/e2e` under `//go:build lab`).
+- Workspace floor in `go.work` bumped from `1.25.0` to
+  `1.25.10` so the CI scan exits clean. The version is chosen
+  to pull in every reachable stdlib fix the scanner flags:
+  GO-2025-4007 (x509 name-constraint quadratic complexity, fixed
+  1.25.3), GO-2025-4011 (asn1 memory exhaustion, fixed 1.25.2),
+  the 1.25.5 x509 batch, and the 1.25.8 net/url batch. Re-running
+  govulncheck against a stdlib older than 1.25.10 immediately
+  surfaces the failure.
+- New `make govulncheck` target with the same per-module shape
+  so adopters can run the exact same scan locally.
+- Existing CI workflows already use `setup-go: '1.25'` (no patch
+  pin), which resolves to the latest 1.25.x available on the
+  GitHub-hosted runner — currently 1.25.10+. The Makefile's
+  install-hint strings bumped from `Go 1.22+` to `Go 1.25.10+`
+  to match.
+- CONTRIBUTING.md gains a "Vulnerability scanning (govulncheck)"
+  subsection under "Dependency updates" explaining the local
+  invocation, the exit-code semantics, and the Go-floor bump
+  policy.
+
+Status row updates:
+- Conformance harness: 59 cases unchanged, all still passing on
+  the bumped toolchain.
+
 Release pipeline hardening (`.github/workflows/release.yml`,
 `docs/sas-sm/release-verification.md`):
 - Closes a real gap in the previous release pipeline. SBOM

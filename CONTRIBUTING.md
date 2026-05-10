@@ -135,6 +135,32 @@ merge. Dependabot PRs are no exception.
 If you submit a manual dependency PR, mark it `dependencies` so it
 sorts alongside the bot's PRs in the maintainer queue.
 
+### Vulnerability scanning (govulncheck)
+
+Beyond Dependabot's "a new version exists" signal, CI runs
+[`govulncheck`](https://pkg.go.dev/golang.org/x/vuln) on every
+Go module. govulncheck is the official Go scanner — it does
+call-graph analysis and only reports vulnerabilities in code
+paths your program actually reaches, so the false-positive rate
+is low compared to a naive lockfile scan.
+
+Run the same scan locally:
+
+```bash
+make govulncheck
+```
+
+Exit codes: `0` clean, non-zero = a reachable vulnerability was
+found. The CI job (`.github/workflows/ci.yml` →
+`govulncheck (per module)`) blocks the merge until the
+underlying issue is resolved — typically by bumping the Go
+toolchain floor or the offending dependency.
+
+The Go toolchain floor lives in `go.work`. We bump it whenever a
+fresh stdlib CVE makes the previous floor unscannable; the
+current pin (1.25.10 at time of writing) carries every reachable
+stdlib fix govulncheck flags.
+
 ## Reporting security issues
 
 Do not open a public issue. See [SECURITY.md](SECURITY.md) for the
