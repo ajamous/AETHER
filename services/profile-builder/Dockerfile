@@ -17,7 +17,7 @@ RUN cd services/profile-builder && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
       -o /out/profile-builder ./cmd/profile-builder
 
-FROM alpine:3.19
+FROM alpine:3.23
 RUN addgroup -S aether && adduser -S aether -G aether
 COPY --from=build /out/profile-builder /usr/local/bin/profile-builder
 COPY --from=build /src/services/profile-builder/templates /etc/aether/profile-builder/templates
