@@ -54,7 +54,7 @@ internal).
 | EuiccSigned1 chain validation              | Automated | `services/smdp-plus/internal/signing/euicc_test.go::TestVerify_HappyPath` plus 4 negative cases |
 | EuiccSigned1 server-challenge replay defense | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsWrongServerChallenge` |
 | EuiccSigned1 unknown CI rejection          | Automated | `services/smdp-plus/.../server_authclient_test.go::TestAuthenticateClient_RejectsEUICCFromUnknownCI` |
-| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). The SAIP UPP that BPP wraps now lands via `pkg/saip` (see SAIP section below). The DPpb signing path also lands via `SmdpSigned2` (§5.7.14, see "SmdpSigned2" rows below); remaining work is the `prepareDownload` HTTP handler + the BPP wrapping itself (ECKA + KDF + AES-128-GCM segmentation + InitialiseSecureChannelRequest signed with DPpb over the captured eUICC otPK) |
+| GetBoundProfilePackage (BPP generation)    | Pending   | Returns honest 501 today (covered by `TestGetBoundProfilePackage_ReturnsNotImplemented`). Three of the four BPP layers now ship: the SAIP UPP via `pkg/saip`, the DPpb signing via `SmdpSigned2` (§5.7.14), and the §H.3 session-key derivation via `services/smdp-plus/internal/bpp.Derive` (see ES8+ rows above). Remaining work is the `prepareDownload` HTTP handler + AES-128-GCM segmentation around the SAIP UPP + InitialiseSecureChannelRequest assembly |
 | SmdpSigned2 ASN.1 round-trip (no otpk + compressed + uncompressed) | Automated | `services/smdp-plus/internal/signing/smdp_signed2_test.go::TestSmdpSigned2_RoundTrip*` |
 | SmdpSigned2 validation rejects bad transactionId + bppEuiccOtpk shapes | Automated | `TestSmdpSigned2_ValidationCatches`     |
 | SmdpSigned2 signature verifies end-to-end (DPpb path)   | Automated | `TestSignSmdpSigned2_VerifiesEndToEnd`     |
@@ -71,7 +71,11 @@ internal).
 | X9.63 KDF SHA-256                          | Automated | `pkg/crypto/kdf/x963_test.go` (NIST CAVP vector)  |
 | ECDSA over P-256                           | Automated | `pkg/crypto/ecdsa/ecdsa_test.go`                  |
 | Brainpool P-256 r1                         | Pending   | Stubbed; tracked for follow-up dependency vetting |
-| Full ProtectedProfilePackage framing       | Pending   | Ships with smdp-plus BPP wrapping (ECKA + X9.63-SHA-256 KDF + AES-128-GCM segmentation around the SAIP UPP). The UPP itself now lands via `pkg/saip` (see SAIP section below) |
+| BPP session keys: SM-DP+ and eUICC sides agree | Automated | `services/smdp-plus/internal/bpp/keys_test.go::TestDerive_BothSidesAgree` (the SCP03t prerequisite — both halves of one ECKA exchange must derive identical SENC/SMAC/MCV or every BPP segment fails GCM authentication on-card) |
+| BPP session keys: distinct slices + spec lengths | Automated | `TestDerive_SliceLengths`, `TestDerive_DistinctSlices`     |
+| BPP session keys: sharedInfo binds derivation (replay defense) | Automated | `TestDerive_DifferentSharedInfoDifferentKeys` |
+| BPP session keys: deterministic for the same inputs | Automated | `TestDerive_StableAcrossInvocations`     |
+| Full ProtectedProfilePackage framing       | Pending   | The session-key derivation step now lands via `services/smdp-plus/internal/bpp` (rows above). The UPP layer lands via `pkg/saip`. Remaining work for full PPP framing is the AES-128-GCM per-segment seal + MAC chaining + the `prepareDownload` HTTP handler that captures the eUICC's otPK from the LPA's PrepareDownloadResponse |
 
 ## ES11 / ES12 — SM-DS
 
@@ -185,7 +189,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **71 cases across 10 families** (ES2+, ES9+,
+summary. Today: **75 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in

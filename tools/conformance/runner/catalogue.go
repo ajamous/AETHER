@@ -289,6 +289,30 @@ var catalogue = []Case{
 	},
 	{
 		Family: "ES8+",
+		Title:  "BPP session keys: SM-DP+ and eUICC sides derive identical (SENC, SMAC, MCV)",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestDerive_BothSidesAgree$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP session keys: slice lengths + non-overlapping regions",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestDerive_(SliceLengths|DistinctSlices)$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP session keys: different sharedInfo binds different keys (replay defense)",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestDerive_DifferentSharedInfoDifferentKeys$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP session keys: deterministic for the same inputs (MCV chain stability)",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestDerive_StableAcrossInvocations$",
+	},
+	{
+		Family: "ES8+",
 		Title:  "ECDSA P-256 sign + verify round-trip",
 		Module: "pkg/crypto", Package: "./ecdsa/...",
 		RunPattern: "^TestSignVerifyP256_RoundTrip$",

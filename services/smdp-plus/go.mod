@@ -9,6 +9,7 @@ require (
 )
 
 require (
+	github.com/ajamous/aether/pkg/crypto v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -19,3 +20,5 @@ require (
 replace github.com/ajamous/aether/pkg/hsmclient => ../../pkg/hsmclient
 
 replace github.com/ajamous/aether/pkg/certmgrclient => ../../pkg/certmgrclient
+
+replace github.com/ajamous/aether/pkg/crypto => ../../pkg/crypto
