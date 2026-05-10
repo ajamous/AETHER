@@ -313,6 +313,36 @@ var catalogue = []Case{
 	},
 	{
 		Family: "ES8+",
+		Title:  "BPP segmentation round-trip: SealSegments + OpenSegments recover plaintext",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestSealSegments_RoundTrip$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP segmentation: independently-derived ECKA keys round-trip end to end",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestSealSegments_BothSidesAgreeFromECKA$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP segmentation: tamper detection (ciphertext + tag)",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestOpenSegments_DetectsTampered",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP segmentation: chain break / segment-reorder rejected",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestOpenSegments_DetectsBrokenChain$",
+	},
+	{
+		Family: "ES8+",
+		Title:  "BPP segmentation: per-segment nonces are unique (no GCM nonce reuse)",
+		Module: "services/smdp-plus", Package: "./internal/bpp/...",
+		RunPattern: "^TestSealSegments_CountersAreUnique$",
+	},
+	{
+		Family: "ES8+",
 		Title:  "ECDSA P-256 sign + verify round-trip",
 		Module: "pkg/crypto", Package: "./ecdsa/...",
 		RunPattern: "^TestSignVerifyP256_RoundTrip$",
