@@ -9,6 +9,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+`pkg/saip` (SGP.22 §B SAIP profile-package codec, minimum-viable subset):
+- Closes the lynchpin Phase 1 dependency identified in the
+  remaining-items audit. Three of four open Phase 1 rows
+  collapsed into "ship `pkg/saip`"; this PR ships the first
+  slice.
+- New stdlib-only Go module `pkg/saip` with:
+  - `ProfileHeader` SEQUENCE (major/minor version, profileType
+    UTF8String, 10-octet nibble-swapped ICCID, mandatory-services
+    SEQUENCE OF UTF8String).
+  - `PEEnd` empty-SEQUENCE terminator.
+  - `Build(header)` constructor that enforces every spec
+    invariant and emits a CHOICE-tagged element list.
+  - `MarshalDER` for byte-stable DER round-trip; `Decode` walks
+    the outer SEQUENCE and returns CHOICE-tagged element bytes
+    in document order.
+  - `AppendRaw` lets callers splice pre-marshalled spare
+    `ProfileElement` bytes (RFM, application, etc.) between the
+    header and PEEnd without breaking package validity —
+    forward-compat seam for the richer element catalogue that
+    lands incrementally.
+- 9 unit tests cover round-trip, every `validate()` rejection
+  path (major/minor out of range, empty profileType, wrong-length
+  ICCID, missing mandatory services), trailing-bytes / non-SEQUENCE
+  / truncated decode rejections, AppendRaw insertion + guards,
+  byte-stable encoding across invocations, and the short/long-form
+  DER length helper.
+- Stdlib-only on purpose: same supply-chain rationale as the
+  OIDC verifier and the auditor CLI — the SAIP codec is a
+  SAS-SM-relevant primitive and should be auditable from a single
+  Go file with zero third-party dependencies.
+
+`services/profile-builder` wired to emit real SAIP:
+- `BuildUPP` now produces a DER-encoded `ProfilePackage` via
+  `pkg/saip` and returns it in the UPP envelope's new `saip_der`
+  field alongside the existing JSON-shaped inputs (kept for
+  human-readable inspection through the admin UI).
+- New `encodeICCIDNibbleSwapped` helper does the SGP.22 §B.1
+  BCD nibble-swap (`d1 d2 → 0x[d2][d1]`, F-padding for 19-digit
+  ICCIDs). Tested against published-spec example pairs.
+- `services/profile-builder/go.mod` adds `pkg/saip` as a
+  workspace `replace`-dep, mirroring the existing pattern that
+  smdp-plus uses for `pkg/hsmclient` and `pkg/certmgrclient`.
+- 3 new template tests: SAIP DER emission round-trips through
+  `pkg/saip.Decode`, the header decodes with the expected
+  fields, and the ICCID nibble-swap matches spec examples.
+- `go.work` gains the new module.
+
+Conformance harness gains 7 cases in a new "SAIP" family
+(round-trip, validation, decode rejections, AppendRaw,
+byte-stability, profile-builder integration, ICCID
+nibble-swap). 66 cases total now (was 59).
+
+Status row updates:
+- `pkg/saip`: new row, "Partial — minimum-viable subset…"
+- `services/profile-builder`: "Skeleton" → "Partial". Per-piece
+  table updated: UPP generation Skeleton → Partial; SAIP codec
+  "Not started" → "Partial — minimum-viable subset…"; BPP
+  pipeline still "Not started" with the explicit dependency on
+  smdp-plus BPP wrapping called out.
+- Conformance harness: 59 → 66 cases, 9 → 10 families.
+- `services/smdp-plus`'s "BPP returns 501 until SAIP codec
+  lands" caveat is unchanged — wiring the smdp-plus BPP path
+  (ECKA + X9.63-SHA-256 KDF + AES-128-GCM segmentation around
+  the SAIP UPP) is the explicit follow-up.
+
 SECURITY.md refresh:
 - Closes a documentation gap created by the recent supply-chain
   PRs. SECURITY.md hadn't been touched since the project

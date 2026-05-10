@@ -28,6 +28,7 @@ use (
 	./pkg/certmgrclient
 	./pkg/crypto
 	./pkg/hsmclient
+	./pkg/saip
 	./services/audit
 	./services/certmgr
 	./services/eim
