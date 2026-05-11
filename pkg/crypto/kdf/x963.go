@@ -23,7 +23,7 @@ func X963(h func() hash.Hash, sharedSecret, sharedInfo []byte, keyLen int) ([]by
 	}
 	hashLen := h().Size()
 	const maxCounter uint64 = 1<<32 - 1
-	if uint64(keyLen) > maxCounter*uint64(hashLen) {
+	if uint64(keyLen) > maxCounter*uint64(hashLen) { //nolint:gosec // keyLen checked > 0 above; on a 64-bit int the conversion is lossless
 		return nil, errors.New("kdf: requested keyLen exceeds X9.63 maximum")
 	}
 

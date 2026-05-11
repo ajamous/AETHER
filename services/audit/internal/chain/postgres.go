@@ -114,7 +114,7 @@ func (l *PGLedger) appendOnce(ctx context.Context, payload json.RawMessage) (*En
 	}
 
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	hash := computeHash(uint64(seq), now, payload, prevHash)
+	hash := computeHash(uint64(seq), now, payload, prevHash) //nolint:gosec // seq is monotonic-positive, fits in uint64
 
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO audit_entries (seq, ts, payload, prev_hash, hash)
@@ -134,7 +134,7 @@ func (l *PGLedger) appendOnce(ctx context.Context, payload json.RawMessage) (*En
 	}
 	rolled = true
 	return &Entry{
-		Seq:       uint64(seq),
+		Seq:       uint64(seq), //nolint:gosec // seq is monotonic-positive
 		Timestamp: now,
 		Payload:   append(json.RawMessage(nil), payload...),
 		PrevHash:  prevHash,
@@ -147,7 +147,7 @@ func (l *PGLedger) Get(seq uint64) (*Entry, error) {
 	ctx := context.Background()
 	row := l.pool.QueryRow(ctx,
 		`SELECT seq, ts, payload, prev_hash, hash
-		   FROM audit_entries WHERE seq = $1`, int64(seq))
+		   FROM audit_entries WHERE seq = $1`, int64(seq)) //nolint:gosec // audit seq will not reach 2^63 in any realistic operator timeline
 	return scanEntry(row)
 }
 
@@ -157,7 +157,7 @@ func (l *PGLedger) List(since uint64) []*Entry {
 	rows, err := l.pool.Query(ctx,
 		`SELECT seq, ts, payload, prev_hash, hash
 		   FROM audit_entries WHERE seq > $1 ORDER BY seq ASC`,
-		int64(since))
+		int64(since)) //nolint:gosec // audit seq will not reach 2^63 in any realistic operator timeline
 	if err != nil {
 		return nil
 	}
