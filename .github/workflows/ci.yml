@@ -49,34 +49,39 @@ jobs:
           # Workspace mode: ./... from the repo root doesn't expand
           # across go.mod boundaries. Iterate per module. Tolerate
           # modules whose only files are behind a build tag (e.g.
-          # test/e2e is gated by `//go:build lab`).
+          # test/e2e is gated by `//go:build lab`). Use `|| rc=$?`
+          # so `bash -e` doesn't kill the script before we can
+          # inspect the return code and decide to tolerate.
           for d in $(find . -name go.mod -not -path './vendor/*' -not -path './ui/admin/node_modules/*' -exec dirname {} \;); do
             echo "==> vet $d"
-            out=$(cd "$d" && go vet ./... 2>&1)
-            rc=$?
-            if [ $rc -ne 0 ] && ! echo "$out" | grep -q 'matched no packages'; then
+            out=$(cd "$d" && go vet ./... 2>&1) || rc=$?
+            rc=${rc:-0}
+            if [ $rc -ne 0 ] && ! echo "$out" | grep -qE 'no packages|matched no|no Go files'; then
               echo "$out"; exit $rc
             fi
+            unset rc
           done
       - name: build (per module)
         run: |
           for d in $(find . -name go.mod -not -path './vendor/*' -not -path './ui/admin/node_modules/*' -exec dirname {} \;); do
             echo "==> build $d"
-            out=$(cd "$d" && go build ./... 2>&1)
-            rc=$?
-            if [ $rc -ne 0 ] && ! echo "$out" | grep -q 'matched no packages'; then
+            out=$(cd "$d" && go build ./... 2>&1) || rc=$?
+            rc=${rc:-0}
+            if [ $rc -ne 0 ] && ! echo "$out" | grep -qE 'no packages|matched no|no Go files'; then
               echo "$out"; exit $rc
             fi
+            unset rc
           done
       - name: test (per module)
         run: |
           for d in $(find . -name go.mod -not -path './vendor/*' -not -path './ui/admin/node_modules/*' -exec dirname {} \;); do
             echo "==> test $d"
-            out=$(cd "$d" && go test ./... 2>&1)
-            rc=$?
-            if [ $rc -ne 0 ] && ! echo "$out" | grep -q 'matched no packages'; then
+            out=$(cd "$d" && go test ./... 2>&1) || rc=$?
+            rc=${rc:-0}
+            if [ $rc -ne 0 ] && ! echo "$out" | grep -qE 'no packages|matched no|no Go files'; then
               echo "$out"; exit $rc
             fi
+            unset rc
           done
 
   lint:
