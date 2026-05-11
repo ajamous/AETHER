@@ -21,6 +21,8 @@ func mapECDSACurve(c hsmv1.Curve) (cryptoecdsa.Curve, error) {
 		return cryptoecdsa.CurveP256, nil
 	case hsmv1.CurveBrainpoolP256r1:
 		return cryptoecdsa.CurveBrainpoolP256r1, nil
+	case hsmv1.CurveUnspecified:
+		return 0, fmt.Errorf("%w: curve not specified", broker.ErrUnsupportedCurve)
 	default:
 		return 0, fmt.Errorf("%w: %q", broker.ErrUnsupportedCurve, c)
 	}
@@ -32,6 +34,8 @@ func mapECKACurve(c hsmv1.Curve) (cryptoecka.Curve, error) {
 		return cryptoecka.CurveP256, nil
 	case hsmv1.CurveBrainpoolP256r1:
 		return cryptoecka.CurveBrainpoolP256r1, nil
+	case hsmv1.CurveUnspecified:
+		return 0, fmt.Errorf("%w: curve not specified", broker.ErrUnsupportedCurve)
 	default:
 		return 0, fmt.Errorf("%w: %q", broker.ErrUnsupportedCurve, c)
 	}

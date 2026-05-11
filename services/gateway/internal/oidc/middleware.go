@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -33,7 +34,8 @@ func Middleware(v *Verifier, reporter AdminReporter) func(http.Handler) http.Han
 			result, err := v.Verify(r.Context(), tok)
 			if err != nil {
 				reason := ReasonNoToken
-				if ve, ok := err.(*VerifyError); ok {
+				var ve *VerifyError
+				if errors.As(err, &ve) {
 					reason = ve.Reason
 				}
 				if reporter != nil {

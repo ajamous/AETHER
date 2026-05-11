@@ -123,7 +123,7 @@ func (s *Server) ListenAndServeTLS(ctx context.Context, addr, certFile, keyFile 
 	}()
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		return srv.Shutdown(shutdownCtx)
 	case err := <-errCh:
@@ -635,6 +635,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
+//nolint:unparam // keep `status` for future non-200 success responses (201, 202)
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

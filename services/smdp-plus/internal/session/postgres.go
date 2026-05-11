@@ -51,10 +51,12 @@ func NewPGStore(ctx context.Context, url string, ttl time.Duration) (*PGStore, e
 		pool.Close()
 		return nil, fmt.Errorf("smdpp/pg: migrate: %w", err)
 	}
+	// The GC goroutine outlives any request context; it runs until
+	// Close() invokes cancelGC. Detached from ctx on purpose.
 	gcCtx, cancel := context.WithCancel(context.Background())
 	s := &PGStore{pool: pool, ttl: ttl, cancelGC: cancel}
 	if ttl > 0 {
-		go s.gcLoop(gcCtx)
+		go s.gcLoop(gcCtx) //nolint:contextcheck // GC outlives request ctx by design
 	}
 	return s, nil
 }

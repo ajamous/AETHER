@@ -191,7 +191,7 @@ func Decode(b []byte) ([][]byte, error) {
 		// Walk one TLV at a time. We need the *full* TLV bytes
 		// (including the outer tag/length) so the caller can
 		// dispatch — strip and re-parse once we know the tag.
-		_, _, n, err := peekTLV(body)
+		_, n, err := peekTLV(body)
 		if err != nil {
 			return nil, fmt.Errorf("saip: element: %w", err)
 		}
@@ -205,7 +205,7 @@ func Decode(b []byte) ([][]byte, error) {
 // it is the [0] ProfileHeader CHOICE. Returns (header, true) on
 // match, (zero, false) otherwise.
 func DecodeHeader(elementBytes []byte) (ProfileHeader, bool) {
-	tag, _, _, err := peekTLV(elementBytes)
+	tag, _, err := peekTLV(elementBytes)
 	if err != nil {
 		return ProfileHeader{}, false
 	}
@@ -221,7 +221,7 @@ func DecodeHeader(elementBytes []byte) (ProfileHeader, bool) {
 
 // IsEnd reports whether the element is the PEEnd terminator.
 func IsEnd(elementBytes []byte) bool {
-	tag, _, _, err := peekTLV(elementBytes)
+	tag, _, err := peekTLV(elementBytes)
 	if err != nil {
 		return false
 	}
@@ -279,16 +279,16 @@ func unwrapSEQUENCE(b []byte) (body, rest []byte, err error) {
 	return b[start : start+bodyLen], b[start+bodyLen:], nil
 }
 
-// peekTLV returns (contextSpecificTagNumber, body, totalTLVBytes, err)
-// for the leading element. Only context-specific tags (class=2)
-// are meaningful for ProfilePackage children, so we extract just
-// the tag number.
-func peekTLV(b []byte) (tag int, body []byte, n int, err error) {
+// peekTLV returns (tagNumber, totalTLVBytes, err) for the leading
+// element. The tag class ((first & 0xC0) >> 6) is allowed to be any
+// value: caller decides what to do with it. Only the tag number and
+// the total span are exposed today; reintroduce a body return if a
+// future caller actually needs the inner bytes.
+func peekTLV(b []byte) (tag, n int, err error) {
 	if len(b) == 0 {
-		return 0, nil, 0, errors.New("empty TLV")
+		return 0, 0, errors.New("empty TLV")
 	}
 	first := b[0]
-	tagClass := (first & 0xC0) >> 6
 	tagNumber := int(first & 0x1F)
 
 	headerStart := 1
@@ -297,7 +297,7 @@ func peekTLV(b []byte) (tag int, body []byte, n int, err error) {
 		tagNumber = 0
 		for {
 			if headerStart >= len(b) {
-				return 0, nil, 0, errors.New("truncated multi-byte tag")
+				return 0, 0, errors.New("truncated multi-byte tag")
 			}
 			c := b[headerStart]
 			tagNumber = (tagNumber << 7) | int(c&0x7F)
@@ -307,21 +307,16 @@ func peekTLV(b []byte) (tag int, body []byte, n int, err error) {
 			}
 		}
 	}
-	if tagClass != 2 {
-		// Not context-specific — caller may still want it; we
-		// just return tagNumber as-is. Used for diagnostics only.
-	}
 
 	bodyLen, lenHeaderLen, err := readDERLength(b[headerStart:])
 	if err != nil {
-		return 0, nil, 0, err
+		return 0, 0, err
 	}
-	bodyStart := headerStart + lenHeaderLen
-	totalN := bodyStart + bodyLen
+	totalN := headerStart + lenHeaderLen + bodyLen
 	if len(b) < totalN {
-		return 0, nil, 0, errors.New("TLV length exceeds input")
+		return 0, 0, errors.New("TLV length exceeds input")
 	}
-	return tagNumber, b[bodyStart:totalN], totalN, nil
+	return tagNumber, totalN, nil
 }
 
 // derLength encodes len(body) per X.690 §8.1.3.

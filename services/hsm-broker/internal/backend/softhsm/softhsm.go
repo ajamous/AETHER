@@ -493,6 +493,8 @@ func keyPairAttrs(kind hsmv1.KeyKind, label, keyID string, ecParams []byte) ([]*
 		priv = append(priv, pkcs11.NewAttribute(pkcs11.CKA_SIGN, true))
 	case hsmv1.KeyKindECKA:
 		priv = append(priv, pkcs11.NewAttribute(pkcs11.CKA_DERIVE, true))
+	case hsmv1.KeyKindUnspecified:
+		return nil, nil, fmt.Errorf("%w: key kind not specified", broker.ErrUnsupportedKind)
 	default:
 		return nil, nil, fmt.Errorf("%w: %q", broker.ErrUnsupportedKind, kind)
 	}
@@ -507,6 +509,8 @@ func ecParamsFor(c hsmv1.Curve) ([]byte, error) {
 		return asn1.Marshal(asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7})
 	case hsmv1.CurveBrainpoolP256r1:
 		return nil, fmt.Errorf("%w: brainpool P-256 r1 not yet wired", broker.ErrUnsupportedCurve)
+	case hsmv1.CurveUnspecified:
+		return nil, fmt.Errorf("%w: curve not specified", broker.ErrUnsupportedCurve)
 	default:
 		return nil, fmt.Errorf("%w: %q", broker.ErrUnsupportedCurve, c)
 	}

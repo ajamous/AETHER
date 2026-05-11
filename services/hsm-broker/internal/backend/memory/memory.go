@@ -106,6 +106,8 @@ func (b *Backend) GenerateKeyPair(_ context.Context, req *hsmv1.GenerateKeyPairR
 		}
 		e.ecka = kp.Priv
 		pub = kp.Pub.Bytes()
+	case hsmv1.KeyKindUnspecified:
+		return nil, fmt.Errorf("%w: key kind not specified", broker.ErrUnsupportedKind)
 	default:
 		return nil, broker.ErrUnsupportedKind
 	}

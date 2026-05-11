@@ -11,8 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
-	"math/big"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -284,8 +283,8 @@ func TestVerify_RejectsMalformed(t *testing.T) {
 			t.Errorf("input %q: expected error", bad)
 			continue
 		}
-		ve, _ := err.(*VerifyError)
-		if ve == nil || (ve.Reason != ReasonNoToken && ve.Reason != ReasonMalformed) {
+		var ve *VerifyError
+		if !errors.As(err, &ve) || (ve.Reason != ReasonNoToken && ve.Reason != ReasonMalformed) {
 			t.Errorf("input %q: reason = %v want NoToken or Malformed", bad, ve)
 		}
 	}
@@ -314,8 +313,8 @@ func assertReason(t *testing.T, err error, want Reason) {
 	if err == nil {
 		t.Fatalf("expected error with reason %s, got nil", want)
 	}
-	ve, ok := err.(*VerifyError)
-	if !ok {
+	var ve *VerifyError
+	if !errors.As(err, &ve) {
 		t.Fatalf("expected *VerifyError, got %T: %v", err, err)
 	}
 	if ve.Reason != want {
@@ -445,24 +444,3 @@ func TestNewWithJWKS(t *testing.T) {
 }
 
 // --- helpers --------------------------------------------------------------
-
-// padBigEndian ensures a byte slice is exactly n bytes (left-padded
-// with zeros). Used in the test if we ever round-trip a big.Int.
-func padBigEndian(b []byte, n int) []byte {
-	if len(b) >= n {
-		return b
-	}
-	out := make([]byte, n)
-	copy(out[n-len(b):], b)
-	return out
-}
-
-// sanityRoundTripBigInt is a guard against accidentally regressing
-// big-endian handling in claims.go.
-func sanityRoundTripBigInt(t *testing.T) {
-	t.Helper()
-	x := big.NewInt(0x12345678)
-	if got := fmt.Sprintf("%x", padBigEndian(x.Bytes(), 4)); got != "12345678" {
-		t.Fatalf("padBigEndian round-trip broken: %s", got)
-	}
-}
