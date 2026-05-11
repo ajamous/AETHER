@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.work ./
 COPY services/eim/go.mod services/eim/go.sum ./services/eim/
