@@ -25,7 +25,7 @@ RUN cd services/hsm-broker && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
       -o /out/hsm-broker ./cmd/hsm-broker
 
-FROM alpine:3.19
+FROM alpine:3.23
 RUN addgroup -S aether && adduser -S aether -G aether
 COPY --from=build /out/hsm-broker /usr/local/bin/hsm-broker
 USER aether
