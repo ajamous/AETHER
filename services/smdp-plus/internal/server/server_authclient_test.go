@@ -110,7 +110,8 @@ func newAuthcheckSrv(t *testing.T, chain *labChain) (smdpURL string, txid []byte
 
 	// Fake hsm-broker.
 	smdpKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	pubPoint := elliptic.Marshal(elliptic.P256(), smdpKey.PublicKey.X, smdpKey.PublicKey.Y)
+	ecdhPub, _ := smdpKey.PublicKey.ECDH()
+	pubPoint := ecdhPub.Bytes()
 	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/v1/generate-key-pair"):
@@ -333,7 +334,8 @@ func TestAuthenticateClient_DPpbSigningEndToEnd(t *testing.T) {
 
 	// Fake hsm-broker that signs any digest with one ECDSA key.
 	smdpKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	pubPoint := elliptic.Marshal(elliptic.P256(), smdpKey.PublicKey.X, smdpKey.PublicKey.Y)
+	ecdhPub, _ := smdpKey.PublicKey.ECDH()
+	pubPoint := ecdhPub.Bytes()
 	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/v1/generate-key-pair"):
@@ -504,7 +506,8 @@ func TestGetBoundProfilePackage_HappyPath(t *testing.T) {
 	chain := newLabChain(t)
 
 	smdpKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	pubPoint := elliptic.Marshal(elliptic.P256(), smdpKey.PublicKey.X, smdpKey.PublicKey.Y)
+	ecdhPub, _ := smdpKey.PublicKey.ECDH()
+	pubPoint := ecdhPub.Bytes()
 	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/v1/generate-key-pair"):
@@ -695,7 +698,8 @@ func newAuthcheckSrvWithDPpb(t *testing.T, chain *labChain) (smdpURL string, txi
 	t.Helper()
 
 	smdpKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	pubPoint := elliptic.Marshal(elliptic.P256(), smdpKey.PublicKey.X, smdpKey.PublicKey.Y)
+	ecdhPub, _ := smdpKey.PublicKey.ECDH()
+	pubPoint := ecdhPub.Bytes()
 	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/v1/generate-key-pair"):

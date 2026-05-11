@@ -290,6 +290,8 @@ func peekTLV(b []byte) (tag, n int, err error) {
 	}
 	first := b[0]
 	tagNumber := int(first & 0x1F)
+	// tag class ((first & 0xC0) >> 6) is allowed to be any value: caller
+	// decides what to do with it; we return tagNumber as-is.
 
 	headerStart := 1
 	if tagNumber == 0x1F {
@@ -307,7 +309,6 @@ func peekTLV(b []byte) (tag, n int, err error) {
 			}
 		}
 	}
-
 	bodyLen, lenHeaderLen, err := readDERLength(b[headerStart:])
 	if err != nil {
 		return 0, 0, err

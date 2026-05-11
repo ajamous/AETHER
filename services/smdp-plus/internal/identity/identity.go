@@ -113,11 +113,16 @@ func EnsureLabIdentity(ctx context.Context, hc *hsmclient.Client, label, serverD
 }
 
 // unmarshalP256Public parses the uncompressed X9.63 point the broker
-// returns into an ecdsa.PublicKey on P-256.
+// returns into an ecdsa.PublicKey on P-256. The wire shape is
+// `0x04 || X(32) || Y(32)` per SEC1 §2.3.3.
 func unmarshalP256Public(point []byte) (*ecdsa.PublicKey, error) {
-	x, y := elliptic.Unmarshal(elliptic.P256(), point)
-	if x == nil {
+	const coordLen = 32
+	if len(point) != 1+2*coordLen || point[0] != 0x04 {
 		return nil, errors.New("identity: failed to unmarshal P-256 public point")
 	}
-	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: x, Y: y}, nil
+	return &ecdsa.PublicKey{
+		Curve: elliptic.P256(),
+		X:     new(big.Int).SetBytes(point[1 : 1+coordLen]),
+		Y:     new(big.Int).SetBytes(point[1+coordLen:]),
+	}, nil
 }

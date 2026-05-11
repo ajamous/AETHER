@@ -47,7 +47,11 @@ func TestInitiateAuthentication_SignatureVerifies(t *testing.T) {
 		t.Fatalf("keygen: %v", err)
 	}
 	keyID := "test-DPauth-handle"
-	pubPoint := elliptic.Marshal(elliptic.P256(), priv.PublicKey.X, priv.PublicKey.Y)
+	ecdhPub, err := priv.PublicKey.ECDH()
+	if err != nil {
+		t.Fatalf("ecdh convert: %v", err)
+	}
+	pubPoint := ecdhPub.Bytes()
 
 	brokerSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {

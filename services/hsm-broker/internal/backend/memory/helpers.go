@@ -2,7 +2,6 @@ package memory
 
 import (
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/asn1"
 	"fmt"
@@ -41,9 +40,16 @@ func mapECKACurve(c hsmv1.Curve) (cryptoecka.Curve, error) {
 	}
 }
 
-// ecdsaPubBytes returns the uncompressed X9.63 point encoding of pub.
+// ecdsaPubBytes returns the uncompressed X9.63 point encoding of pub
+// (SEC1 §2.3.3: `0x04 || X || Y`, with X and Y left-padded to the
+// curve's byte length).
 func ecdsaPubBytes(priv *ecdsa.PrivateKey) []byte {
-	return elliptic.Marshal(priv.Curve, priv.PublicKey.X, priv.PublicKey.Y)
+	byteLen := (priv.Curve.Params().BitSize + 7) / 8
+	out := make([]byte, 1+2*byteLen)
+	out[0] = 0x04
+	priv.PublicKey.X.FillBytes(out[1 : 1+byteLen])
+	priv.PublicKey.Y.FillBytes(out[1+byteLen:])
+	return out
 }
 
 type asn1Sig struct {
