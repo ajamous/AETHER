@@ -5,7 +5,7 @@
 # lab compose layer rather than baked in here, since production
 # deployments swap in a different PKCS#11 library.
 
-FROM golang:1.22-alpine AS build
+FROM golang:1.26-alpine AS build
 WORKDIR /src
 
 # Copy the workspace pieces this service depends on.
