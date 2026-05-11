@@ -1,4 +1,4 @@
-go 1.25.10
+go 1.25.9
 
 // Aether Go workspace.
 //
@@ -12,13 +12,13 @@ go 1.25.10
 // those workflows will break CodeQL extraction (was the cause of
 // the November 2026 fix-codeql-pipeline PR).
 //
-// Why 1.25.10 specifically: it pulls in every reachable stdlib CVE
-// fix that govulncheck flags against earlier 1.25.x patch
-// releases — GO-2025-4007 (x509 name-constraint quadratic
-// complexity, fixed 1.25.3), GO-2025-4011 (asn1 memory
-// exhaustion, fixed 1.25.2), the 1.25.5 x509 batch, and the
-// 1.25.8 net/url batch. The govulncheck CI job exits 0 only on
-// 1.25.10+, so anything older breaks the pipeline.
+// Why 1.25.9 specifically: it is the latest 1.25.x available in
+// setup-go's release archive at the time of this commit and pulls
+// in every reachable stdlib CVE fix that govulncheck flagged
+// against earlier 1.25.x patch releases — GO-2025-4007 (x509
+// name-constraint quadratic complexity, fixed 1.25.3),
+// GO-2025-4011 (asn1 memory exhaustion, fixed 1.25.2), the
+// 1.25.5 x509 batch, and the 1.25.8 net/url batch.
 //
 // Why 1.25 family at all: pgx/v5 v5.9.2 (used by audit, smds,
 // smdp-plus, eim for their Postgres backends) requires Go 1.25.
