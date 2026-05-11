@@ -97,7 +97,9 @@ internal).
 | ES12 RegisterEvent (§5.5.1)       | Automated | `services/smds/.../server_test.go::TestSMDS_FullDiscoveryFlow` |
 | ES12 DeleteEvent (§5.5.2)         | Automated | same                                                     |
 | ES12 RegisterEvent idempotency    | Automated | `services/smds/internal/events/store_test.go::TestMemoryStore_Idempotent` (and PG equivalent) |
-| ES11 AuthenticateClient (§5.5.4)  | Automated | `services/smds/.../server_test.go` — skeleton path; signature verification is the same dependency as smdp-plus |
+| ES11 AuthenticateClient (§5.5.4)  | Automated | `services/smds/.../server_test.go::TestSMDS_AuthenticateClient_SigningEndToEnd` (SM-DS-side ServerSigned1 + ECDSA-SHA-256 via hsm-broker) plus lab-mode + bad-challenge variants |
+| ES11 ServerSigned1 ASN.1 round-trip | Automated | `services/smds/internal/signing/signing_test.go::TestServerSigned1_RoundTrip` |
+| ES11 ServerSigned1 validation      | Automated | `services/smds/internal/signing/signing_test.go::TestServerSigned1_ValidationCatches` |
 | ES11 GetEvents (§5.5.3)           | Automated | `services/smds/.../server_test.go::TestSMDS_FullDiscoveryFlow` |
 | Delete-of-unknown returns 404     | Automated | `services/smds/.../server_test.go::TestSMDS_DeleteUnknownReturns404` |
 
@@ -202,7 +204,7 @@ linter for this matrix is a planned follow-up.
 The machine-readable catalogue lives at
 [`tools/conformance/runner/catalogue.go`](../runner/catalogue.go);
 `make conformance` runs every entry and prints a per-family
-summary. Today: **88 cases across 10 families** (ES2+, ES9+,
+summary. Today: **92 cases across 10 families** (ES2+, ES9+,
 ES8+/Crypto, SAIP, ES11/ES12, SGP.32, Audit, Certs, HSM,
 Admin). When the two drift, the `go test`-driven catalogue is
 authoritative — humans update this human-readable matrix in
