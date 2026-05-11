@@ -26,7 +26,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
 
       - name: initialize CodeQL
@@ -60,3 +60,9 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{ matrix.language }}"
+          # Code Scanning requires GitHub Advanced Security, which
+          # isn't available on this repo's plan. Skip the SARIF
+          # upload so the job runs as a build-smoke-test for the
+          # Go extractor (still useful: catches extraction failures
+          # and broken go.work configurations before they hit main).
+          upload: 'never'

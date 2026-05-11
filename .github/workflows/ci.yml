@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: go vet (per module)
         run: |
@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -107,7 +107,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: install govulncheck
         # Pinned major version so a backward-incompatible CLI
@@ -171,7 +171,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: audit ledger integration tests
         working-directory: services/audit
@@ -190,7 +190,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: install softhsm2
         run: sudo apt-get update && sudo apt-get install -y softhsm2
@@ -248,7 +248,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: run conformance suite
         run: go run ./tools/conformance/runner
@@ -276,7 +276,7 @@ jobs:
           node-version: '20'
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: true
       - name: redocly lint
         working-directory: services/gateway/api/v1
