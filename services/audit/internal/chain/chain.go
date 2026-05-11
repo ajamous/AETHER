@@ -130,7 +130,8 @@ func (l *Ledger) Verify() VerifyResult {
 
 	prev := make([]byte, sha256.Size)
 	for i, e := range l.entries {
-		if uint64(i+1) != e.Seq {
+		if uint64(i+1) != e.Seq { //nolint:gosec // i is a loop index bounded by len(entries); fits in uint64
+
 			return VerifyResult{OK: false, Length: len(l.entries),
 				FailedAtSeq: e.Seq, Reason: "sequence number out of order"}
 		}
@@ -159,7 +160,7 @@ func computeHash(seq uint64, ts time.Time, payload []byte, prev []byte) []byte {
 	h := sha256.New()
 	var buf [16]byte
 	binary.BigEndian.PutUint64(buf[0:8], seq)
-	binary.BigEndian.PutUint64(buf[8:16], uint64(ts.UTC().UnixNano()))
+	binary.BigEndian.PutUint64(buf[8:16], uint64(ts.UTC().UnixNano())) //nolint:gosec // audit timestamps post-1970 are positive int64; conversion lossless
 	h.Write(buf[:])
 	h.Write(payload)
 	h.Write(prev)

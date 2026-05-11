@@ -64,7 +64,7 @@ func (b *Backend) Health(_ context.Context) (*hsmv1.HealthResponse, error) {
 	return &hsmv1.HealthResponse{
 		Ready:          true,
 		Backend:        "memory",
-		ActiveSessions: uint32(len(b.keys)),
+		ActiveSessions: uint32(len(b.keys)), //nolint:gosec // in-memory map size bounded by RAM, won't approach 2^32
 	}, nil
 }
 

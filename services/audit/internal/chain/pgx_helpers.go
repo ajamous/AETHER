@@ -43,7 +43,7 @@ func scanEntry(r rowScanner) (*Entry, error) {
 		return nil, err
 	}
 	return &Entry{
-		Seq:       uint64(seq),
+		Seq:       uint64(seq), //nolint:gosec // seq is the DB-monotonic SERIAL column, always > 0
 		Timestamp: ts.UTC(),
 		Payload:   json.RawMessage(payload),
 		PrevHash:  prevHash,
