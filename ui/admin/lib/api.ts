@@ -13,9 +13,13 @@
 
 import { auth } from '@/auth';
 
-const GATEWAY = process.env.AETHER_GATEWAY_URL || 'http://localhost:8080';
-const AUDIT = process.env.AETHER_AUDIT_URL || 'http://localhost:8447';
-const CERTMGR = process.env.AETHER_CERTMGR_URL || 'http://localhost:8444';
+// Lazy env reads. Turbopack (Next.js 15+) statically folds top-level
+// `process.env.X || 'default'` patterns into the bundle at build time,
+// which means runtime env from docker-compose is never consulted.
+// Wrapping each in a function defers the read to call time.
+const gatewayUrl = () => process.env.AETHER_GATEWAY_URL || 'http://localhost:8080';
+const auditUrl = () => process.env.AETHER_AUDIT_URL || 'http://localhost:8447';
+const certmgrUrl = () => process.env.AETHER_CERTMGR_URL || 'http://localhost:8444';
 
 type FetchOpts = {
   cache?: RequestCache;
@@ -28,7 +32,7 @@ type FetchOpts = {
 // when the user is unauthenticated. The empty-object form keeps
 // the call site simple: spread the result into the headers init.
 async function gatewayAuthHeaders(url: string): Promise<Record<string, string>> {
-  if (!url.startsWith(GATEWAY)) {
+  if (!url.startsWith(gatewayUrl())) {
     // AUDIT and CERTMGR have no OIDC gate; forwarding a Bearer
     // would leak the operator's id_token to services that don't
     // need it.
@@ -69,10 +73,10 @@ export type GatewayHealth = {
   ready: boolean;
   upstream: Record<string, string>;
 };
-export const fetchGatewayHealth = () => get<GatewayHealth>(`${GATEWAY}/v1/health`);
+export const fetchGatewayHealth = () => get<GatewayHealth>(`${gatewayUrl()}/v1/health`);
 
 export type Templates = { templates: string[] };
-export const fetchTemplates = () => get<Templates>(`${GATEWAY}/v1/templates`);
+export const fetchTemplates = () => get<Templates>(`${gatewayUrl()}/v1/templates`);
 
 // ---- Certmgr ---------------------------------------------------------------
 
@@ -86,7 +90,7 @@ export type CertView = {
   serial_number: string;
   loaded_at: string;
 };
-export const fetchCerts = () => get<CertView[]>(`${CERTMGR}/v1/certs`);
+export const fetchCerts = () => get<CertView[]>(`${certmgrUrl()}/v1/certs`);
 
 export type CertHealth = {
   ready: boolean;
@@ -96,7 +100,7 @@ export type CertHealth = {
   expiring_soon: string[];
   earliest_expiry_days: number;
 };
-export const fetchCertmgrHealth = () => get<CertHealth>(`${CERTMGR}/v1/health`);
+export const fetchCertmgrHealth = () => get<CertHealth>(`${certmgrUrl()}/v1/health`);
 
 // ---- Audit -----------------------------------------------------------------
 
@@ -109,7 +113,7 @@ export type AuditEntry = {
 };
 export type AuditList = { length: number; entries: AuditEntry[] };
 export const fetchAuditEntries = (since = 0) =>
-  get<AuditList>(`${AUDIT}/v1/events?since=${since}`);
+  get<AuditList>(`${auditUrl()}/v1/events?since=${since}`);
 
 export type VerifyResult = {
   ok: boolean;
@@ -117,7 +121,7 @@ export type VerifyResult = {
   failed_at_seq?: number;
   reason?: string;
 };
-export const fetchAuditVerify = () => get<VerifyResult>(`${AUDIT}/v1/verify`);
+export const fetchAuditVerify = () => get<VerifyResult>(`${auditUrl()}/v1/verify`);
 
 // ---- SM-DS -----------------------------------------------------------------
 
@@ -129,7 +133,7 @@ export type SMDSEvent = {
   registered_at: string;
 };
 export type SMDSEvents = { length: number; events: SMDSEvent[] };
-export const fetchSMDSEvents = () => get<SMDSEvents>(`${GATEWAY}/v1/smds/events`);
+export const fetchSMDSEvents = () => get<SMDSEvents>(`${gatewayUrl()}/v1/smds/events`);
 
 // ---- eIM (SGP.32) ----------------------------------------------------------
 
@@ -141,4 +145,4 @@ export type IoTDevice = {
   last_seen?: string | null;
 };
 export type IoTDevices = { length: number; devices: IoTDevice[] };
-export const fetchIoTDevices = () => get<IoTDevices>(`${GATEWAY}/v1/eim/devices`);
+export const fetchIoTDevices = () => get<IoTDevices>(`${gatewayUrl()}/v1/eim/devices`);

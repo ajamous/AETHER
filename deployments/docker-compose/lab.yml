@@ -235,6 +235,11 @@ services:
       AETHER_GATEWAY_URL: http://gateway:8080
       AETHER_AUDIT_URL: http://audit:8447
       AETHER_CERTMGR_URL: http://certmgr:8444
+      # Auth.js v5 refuses to initialize without a secret, even in
+      # the lab-bypass mode (no AUTH_OIDC_* set). This value is for
+      # local lab use only — production deployments use a separate
+      # compose file with a real secret sourced from a vault.
+      AUTH_SECRET: lab-bypass-not-a-real-secret-do-not-use-in-prod
     depends_on:
       gateway:
         condition: service_healthy

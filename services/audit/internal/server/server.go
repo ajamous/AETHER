@@ -128,9 +128,16 @@ func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
 		}
 		since = n
 	}
+	entries := s.ledger.List(since)
+	if entries == nil {
+		// JSON contract: empty list, not null. Go's nil slice would
+		// otherwise serialize to `null` and break clients that expect
+		// an array.
+		entries = []*chain.Entry{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"length":  s.ledger.Len(),
-		"entries": s.ledger.List(since),
+		"entries": entries,
 	})
 }
 
