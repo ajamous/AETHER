@@ -1,6 +1,5 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.work ./
 COPY services/certmgr/go.mod ./services/certmgr/
 COPY pkg/crypto/go.mod ./pkg/crypto/
 COPY pkg/asn1/sgp22/go/go.mod ./pkg/asn1/sgp22/go/

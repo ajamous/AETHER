@@ -1,6 +1,5 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.work ./
 COPY services/smds/go.mod ./services/smds/
 COPY services/audit/go.mod ./services/audit/
 COPY services/profile-builder/go.mod services/profile-builder/go.sum ./services/profile-builder/
@@ -10,6 +9,7 @@ COPY services/certmgr/go.mod ./services/certmgr/
 COPY services/smdp-plus/go.mod ./services/smdp-plus/
 COPY pkg/crypto/go.mod ./pkg/crypto/
 COPY pkg/asn1/sgp22/go/go.mod ./pkg/asn1/sgp22/go/
+COPY pkg/hsmclient/go.mod ./pkg/hsmclient/
 
 RUN cd services/smds && go mod download
 

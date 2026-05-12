@@ -1,6 +1,5 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.work ./
 COPY services/eim/go.mod services/eim/go.sum ./services/eim/
 COPY services/smds/go.mod services/smds/go.sum ./services/smds/
 COPY services/audit/go.mod services/audit/go.sum ./services/audit/
