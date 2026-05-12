@@ -1,10 +1,11 @@
 module github.com/ajamous/aether/services/smdp-plus
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/ajamous/aether/pkg/certmgrclient v0.0.0-00010101000000-000000000000
 	github.com/ajamous/aether/pkg/hsmclient v0.0.0-00010101000000-000000000000
+	github.com/ajamous/aether/pkg/saip v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.9.2
 )
 
@@ -22,3 +23,5 @@ replace github.com/ajamous/aether/pkg/hsmclient => ../../pkg/hsmclient
 replace github.com/ajamous/aether/pkg/certmgrclient => ../../pkg/certmgrclient
 
 replace github.com/ajamous/aether/pkg/crypto => ../../pkg/crypto
+
+replace github.com/ajamous/aether/pkg/saip => ../../pkg/saip

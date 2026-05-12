@@ -1,6 +1,6 @@
 module github.com/ajamous/aether/services/hsm-broker
 
-go 1.22
+go 1.26.0
 
 require github.com/ajamous/aether/pkg/crypto v0.0.0-00010101000000-000000000000
 

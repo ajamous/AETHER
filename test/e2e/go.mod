@@ -1,3 +1,3 @@
 module github.com/ajamous/aether/test/e2e
 
-go 1.22
+go 1.26.0
