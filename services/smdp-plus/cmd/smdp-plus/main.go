@@ -13,6 +13,7 @@ import (
 
 	"github.com/ajamous/aether/pkg/certmgrclient"
 	"github.com/ajamous/aether/pkg/hsmclient"
+	"github.com/ajamous/aether/pkg/pbclient"
 	"github.com/ajamous/aether/services/smdp-plus/internal/identity"
 	"github.com/ajamous/aether/services/smdp-plus/internal/server"
 	"github.com/ajamous/aether/services/smdp-plus/internal/session"
@@ -37,6 +38,8 @@ func run() error {
 		serverAddress = flag.String("address", "aether.local", "SM-DP+ public address (goes into ServerSigned1.serverAddress)")
 		ttl           = flag.Duration("session-ttl", 10*time.Minute, "session TTL")
 		pgURL         = flag.String("pg-url", "", "PostgreSQL URL; if empty, the in-memory session store is used (lab default)")
+		pbURL         = flag.String("profile-builder", "", "profile-builder base URL; enables POST /v1/profiles/prepare and credential-carrying BPPs")
+		defaultTpl    = flag.String("default-template", "", "profile-builder template name used by /v1/profiles/prepare when a request omits one")
 	)
 	flag.Parse()
 
@@ -129,6 +132,29 @@ func run() error {
 		)
 	} else {
 		logger.Warn("smdp-plus eUICC verification DISABLED (no --certmgr); authenticateClient skips signature checks")
+	}
+
+	// Optional profile-builder integration. Enabled when
+	// --profile-builder is set; lets POST /v1/profiles/prepare build a
+	// credential-carrying UPP and getBoundProfilePackage seal it. When
+	// absent, getBoundProfilePackage falls back to a header-only
+	// placeholder UPP.
+	if *pbURL != "" {
+		pc := pbclient.New(*pbURL)
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if _, err := pc.Health(probeCtx); err != nil {
+			probeCancel()
+			return fmt.Errorf("profile-builder health probe at %s: %w", *pbURL, err)
+		}
+		probeCancel()
+		cfg.ProfileBuilder = pc
+		cfg.DefaultTemplate = *defaultTpl
+		logger.Info("smdp-plus profile-builder integration enabled",
+			slog.String("profile_builder", *pbURL),
+			slog.String("default_template", *defaultTpl),
+		)
+	} else {
+		logger.Warn("smdp-plus profile-builder integration DISABLED (no --profile-builder); getBoundProfilePackage seals a header-only placeholder UPP")
 	}
 
 	srv := server.New(store, cfg)

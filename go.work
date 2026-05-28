@@ -24,6 +24,7 @@ use (
 	./pkg/certmgrclient
 	./pkg/crypto
 	./pkg/hsmclient
+	./pkg/pbclient
 	./pkg/saip
 	./services/audit
 	./services/certmgr

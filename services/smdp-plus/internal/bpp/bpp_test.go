@@ -159,6 +159,73 @@ func TestAssembleBoundProfilePackage_StableAcrossInvocations(t *testing.T) {
 	}
 }
 
+// TestDisassembleBoundProfilePackage_RoundTrip confirms a BPP built
+// by AssembleBoundProfilePackage parses back into the same ISCR
+// fields and the same ordered segment bodies.
+func TestDisassembleBoundProfilePackage_RoundTrip(t *testing.T) {
+	iscr := goodISCR()
+	segments := [][]byte{
+		bytes.Repeat([]byte{0x11}, 48),
+		bytes.Repeat([]byte{0x22}, 16),
+		bytes.Repeat([]byte{0x33}, 80),
+	}
+	der, err := AssembleBoundProfilePackage(iscr, segments)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	gotISCR, gotSegs, err := DisassembleBoundProfilePackage(der)
+	if err != nil {
+		t.Fatalf("disassemble: %v", err)
+	}
+	if gotISCR.RemoteOpId != iscr.RemoteOpId {
+		t.Errorf("RemoteOpId = %d, want %d", gotISCR.RemoteOpId, iscr.RemoteOpId)
+	}
+	if !bytes.Equal(gotISCR.TransactionID, iscr.TransactionID) {
+		t.Errorf("TransactionID mismatch")
+	}
+	if !bytes.Equal(gotISCR.SMDPOtpk, iscr.SMDPOtpk) {
+		t.Errorf("SMDPOtpk mismatch")
+	}
+	if !bytes.Equal(gotISCR.SMDPSign, iscr.SMDPSign) {
+		t.Errorf("SMDPSign mismatch")
+	}
+	if len(gotSegs) != len(segments) {
+		t.Fatalf("got %d segments, want %d", len(gotSegs), len(segments))
+	}
+	for i := range segments {
+		if !bytes.Equal(gotSegs[i], segments[i]) {
+			t.Errorf("segment %d mismatch", i)
+		}
+	}
+}
+
+func TestDisassembleBoundProfilePackage_RejectsGarbage(t *testing.T) {
+	for _, b := range [][]byte{nil, {0x30, 0x01, 0x00}, {0x7F}} {
+		if _, _, err := DisassembleBoundProfilePackage(b); err == nil {
+			t.Errorf("expected error for %x", b)
+		}
+	}
+}
+
+// TestSharedInfo_Deterministic confirms SharedInfo is stable for a
+// given transaction id and binds the id (different ids → different
+// bytes). The SM-DP+ and eUICC must derive identical shared-info or
+// every segment fails GCM authentication.
+func TestSharedInfo_Deterministic(t *testing.T) {
+	a := SharedInfo("deadbeef")
+	b := SharedInfo("deadbeef")
+	if !bytes.Equal(a, b) {
+		t.Error("SharedInfo not deterministic for same transaction id")
+	}
+	if bytes.Equal(a, SharedInfo("cafebabe")) {
+		t.Error("SharedInfo does not bind the transaction id")
+	}
+	// Must carry the SCP03t key parameters up front.
+	if !bytes.HasPrefix(a, KeyTypeAESGCM) {
+		t.Error("SharedInfo does not lead with keyType")
+	}
+}
+
 func TestDERLength_RoundTrip(t *testing.T) {
 	for _, n := range []int{0, 1, 127, 128, 255, 256, 65535, 65536} {
 		enc := derLength(n)

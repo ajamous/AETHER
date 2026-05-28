@@ -7,11 +7,10 @@
 // turns a template + per-subscriber data into a SAIP Unprotected
 // Profile Package (UPP).
 //
-// Today the SAIP codec lives outside this package (planned under
-// pkg/saip). This package handles template I/O and validation; the
-// build step now produces real DER-encoded SAIP bytes via
-// pkg/saip — minimum-viable header + PEEnd today, richer types
-// land as pkg/saip grows.
+// The SAIP codec lives in pkg/saip. This package handles template
+// I/O and validation; the build step produces real DER-encoded SAIP
+// bytes carrying the header, the PE-USIM subscriber identity, the
+// PE-AKAParameter authentication keys, and the PEEnd terminator.
 package template
 
 import (
@@ -201,10 +200,10 @@ func ValidateSubscriber(s *SubscriberData) error {
 // services (smdp-plus) consume; the Profile + Subscriber fields
 // are kept for human-readable inspection through the admin UI.
 //
-// SAIP today is the minimum-viable subset shipped by pkg/saip:
-// ProfileHeader + PEEnd. Richer ProfileElements (PE-USIM,
-// PE-PinCodes, etc.) land as pkg/saip grows; their bytes will
-// appear inside SAIP without changing this envelope's shape.
+// SAIP carries ProfileHeader + PE-USIM + PE-AKAParameter + PEEnd.
+// Further ProfileElements (PE-PinCodes, PE-FileSystem, etc.) land as
+// pkg/saip grows; their bytes will appear inside SAIP without
+// changing this envelope's shape.
 type UPPEnvelope struct {
 	Profile    *Profile        `json:"profile"`
 	Subscriber *SubscriberData `json:"subscriber"`
@@ -248,6 +247,35 @@ func BuildUPP(p *Profile, s *SubscriberData) (*UPPEnvelope, error) {
 	if err != nil {
 		return nil, fmt.Errorf("upp: saip build: %w", err)
 	}
+
+	// PE-USIM carries the subscriber identity (IMSI + home PLMN) the
+	// network uses to recognise the SIM; PE-AKAParameter carries the
+	// Milenage Ki + OPc the eUICC answers authentication challenges
+	// with. Without these the downloaded profile cannot attach.
+	usimDER, err := saip.BuildUSIM(saip.PEUSIM{
+		IMSI: s.IMSI,
+		MCC:  p.Network.MCC,
+		MNC:  p.Network.MNC,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("upp: build PE-USIM: %w", err)
+	}
+	if err := pkg.AppendRaw(usimDER); err != nil {
+		return nil, fmt.Errorf("upp: append PE-USIM: %w", err)
+	}
+
+	akaDER, err := saip.BuildAKAParameter(saip.PEAKAParameter{
+		AlgorithmID: saip.AKAAlgorithmMilenage,
+		Ki:          s.Ki,
+		OPc:         s.OPc,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("upp: build PE-AKAParameter: %w", err)
+	}
+	if err := pkg.AppendRaw(akaDER); err != nil {
+		return nil, fmt.Errorf("upp: append PE-AKAParameter: %w", err)
+	}
+
 	der, err := pkg.MarshalDER()
 	if err != nil {
 		return nil, fmt.Errorf("upp: saip marshal: %w", err)
@@ -257,7 +285,7 @@ func BuildUPP(p *Profile, s *SubscriberData) (*UPPEnvelope, error) {
 		Profile:    p,
 		Subscriber: s,
 		SAIP:       der,
-		Note:       "SAIP minimum-viable subset (header + PEEnd); richer ProfileElements land as pkg/saip grows",
+		Note:       "SAIP carries header + PE-USIM (IMSI/PLMN) + PE-AKAParameter (Ki/OPc) + PEEnd; per-element TCA §B wire framing (EF packing, PE-Header wrappers) is the hardware-bench follow-up",
 	}, nil
 }
 

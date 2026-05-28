@@ -9,7 +9,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdh"
 	"crypto/rand"
@@ -23,10 +22,12 @@ import (
 
 	"github.com/ajamous/aether/pkg/crypto/ecka"
 	"github.com/ajamous/aether/pkg/hsmclient"
+	"github.com/ajamous/aether/pkg/pbclient"
 	"github.com/ajamous/aether/pkg/saip"
 	smdpv1 "github.com/ajamous/aether/services/smdp-plus/api/v1"
 	"github.com/ajamous/aether/services/smdp-plus/internal/bpp"
 	"github.com/ajamous/aether/services/smdp-plus/internal/identity"
+	"github.com/ajamous/aether/services/smdp-plus/internal/profile"
 	"github.com/ajamous/aether/services/smdp-plus/internal/session"
 	"github.com/ajamous/aether/services/smdp-plus/internal/signing"
 )
@@ -34,11 +35,15 @@ import (
 // Server is the SM-DP+ HTTP server.
 type Server struct {
 	sessions session.Store
+	profiles profile.Store // prepared profiles, keyed by ICCID
 	hsm      *hsmclient.Client
 	identity *identity.Identity // DPauth — signs ServerSigned1 (§5.7.13)
 	dppb     *identity.Identity // DPpb   — signs SmdpSigned2 (§5.7.14)
 	trust    *identity.TrustMaterial
 	address  string // SM-DP+ public address (goes into ServerSigned1.serverAddress)
+
+	pb              *pbclient.Client // profile-builder; gates /v1/profiles/prepare
+	defaultTemplate string           // template used by prepare when none is given
 }
 
 // Config holds the optional dependencies. New() works with the
@@ -57,18 +62,34 @@ type Config struct {
 	DPpb     *identity.Identity // DPpb (optional; gates SmdpSigned2)
 	Trust    *identity.TrustMaterial
 	Address  string
+
+	// ProfileBuilder, when set, enables POST /v1/profiles/prepare and
+	// lets getBoundProfilePackage seal a real credential-carrying UPP
+	// built by profile-builder instead of the header-only placeholder.
+	ProfileBuilder *pbclient.Client
+	// DefaultTemplate is the profile-builder template prepare uses when
+	// a request omits one.
+	DefaultTemplate string
+	// Profiles overrides the prepared-profile store (tests inject a
+	// pre-seeded store). Defaults to an in-memory store.
+	Profiles profile.Store
 }
 
 // New constructs a Server with the given session store and (optional)
 // dependencies.
 func New(s session.Store, cfgs ...Config) *Server {
-	srv := &Server{sessions: s}
+	srv := &Server{sessions: s, profiles: profile.NewMemoryStore()}
 	if len(cfgs) > 0 {
 		srv.hsm = cfgs[0].HSM
 		srv.identity = cfgs[0].Identity
 		srv.dppb = cfgs[0].DPpb
 		srv.trust = cfgs[0].Trust
 		srv.address = cfgs[0].Address
+		srv.pb = cfgs[0].ProfileBuilder
+		srv.defaultTemplate = cfgs[0].DefaultTemplate
+		if cfgs[0].Profiles != nil {
+			srv.profiles = cfgs[0].Profiles
+		}
 	}
 	return srv
 }
@@ -101,6 +122,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /gsma/rsp2/es9plus/authenticateClient", s.handleAuthenticateClient)
 	mux.HandleFunc("POST /gsma/rsp2/es9plus/getBoundProfilePackage", s.handleGetBoundProfilePackage)
 	mux.HandleFunc("POST /gsma/rsp2/es9plus/handleNotification", s.handleHandleNotification)
+	mux.HandleFunc("POST /v1/profiles/prepare", s.handlePrepareProfile)
 	mux.HandleFunc("GET /v1/health", s.handleHealth)
 	return mux
 }
@@ -437,7 +459,7 @@ func (s *Server) handleGetBoundProfilePackage(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	der, err := s.buildBPP(r.Context(), sess, req.EUICCOtpk)
+	der, err := s.buildBPP(r.Context(), sess, req.EUICCOtpk, req.ICCID)
 	if err != nil {
 		slog.Default().Error("BPP assembly failed", slog.String("err", err.Error()))
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("BPP assembly: %v", err))
@@ -454,7 +476,7 @@ func (s *Server) handleGetBoundProfilePackage(w http.ResponseWriter, r *http.Req
 // out from the HTTP handler so the test harness can call it
 // directly when it wants to exercise the assembly without going
 // through JSON.
-func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk []byte) ([]byte, error) {
+func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk []byte, iccid string) ([]byte, error) {
 	// 1. SM-DP+ ephemeral ECKA keypair.
 	smdpEphemeral, err := ecka.GenerateKeyPair(ecka.CurveP256)
 	if err != nil {
@@ -469,22 +491,12 @@ func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk 
 		return nil, fmt.Errorf("parse euicc otpk: %w", err)
 	}
 
-	// 3. sharedInfo per SGP.22 §H.4: a small tagged blob
-	// containing keyType/keyLength/keyUsage. We use the same
-	// values the ControlRefTemplate carries so both sides
-	// derive the same bytes.
-	//
-	// The exact spec layout (TLV-tagged with APPLICATION-N tags
-	// per §H.4 Table H-1) is the documented hardware-bench
-	// follow-up; the in-tree concatenation matches the spec in
-	// shape (key-binding inputs → KDF input) and round-trips
-	// against itself.
-	sharedInfo := bytes.Join([][]byte{
-		bpp.KeyTypeAESGCM,
-		bpp.KeyLengthAES128,
-		bpp.KeyUsageQualifierEncryptAndIntegrity,
-		[]byte(sess.TransactionID),
-	}, nil)
+	// 3. sharedInfo per SGP.22 §H.4: binds keyType/keyLength/keyUsage
+	// and the transaction id. bpp.SharedInfo is the single source of
+	// truth both this sealer and any opener derive over. The exact
+	// §H.4 TLV-tagged layout is the documented hardware-bench
+	// follow-up.
+	sharedInfo := bpp.SharedInfo(sess.TransactionID)
 
 	// 4. Derive SENC/SMAC/MCV.
 	keys, err := bpp.Derive(smdpEphemeral.Priv, euiccPub, sharedInfo)
@@ -492,24 +504,14 @@ func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk 
 		return nil, fmt.Errorf("derive session keys: %w", err)
 	}
 
-	// 5. Build a minimum-viable SAIP UPP (header + PEEnd). Same
-	// shape profile-builder emits today; richer ProfileElements
-	// land as pkg/saip's catalogue grows.
-	iccidBytes := sessionICCIDBytes(sess)
-	hdr := saip.ProfileHeader{
-		MajorVersion:           saip.SAIPMajorVersion,
-		MinorVersion:           saip.SAIPMinorVersion,
-		ProfileType:            "Aether In-Tree Test Profile",
-		ICCID:                  iccidBytes,
-		EUICCMandatoryServices: []string{"contactless"},
-	}
-	pkg, err := saip.Build(hdr)
+	// 5. Resolve the SAIP UPP to seal. When the BSS has prepared a
+	// profile for this ICCID (POST /v1/profiles/prepare, the in-tree
+	// stand-in for ES2+ DownloadOrder), seal that real credential-
+	// carrying UPP from profile-builder; otherwise fall back to a
+	// header-only placeholder so the lab path stays self-contained.
+	upp, err := s.uppForSession(sess, iccid)
 	if err != nil {
-		return nil, fmt.Errorf("build SAIP UPP: %w", err)
-	}
-	upp, err := pkg.MarshalDER()
-	if err != nil {
-		return nil, fmt.Errorf("marshal SAIP UPP: %w", err)
+		return nil, fmt.Errorf("resolve UPP: %w", err)
 	}
 
 	// 6. Seal the UPP into AES-128-GCM segments.
@@ -545,6 +547,95 @@ func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk 
 
 	// 8. Assemble the outer BPP SEQUENCE.
 	return bpp.AssembleBoundProfilePackage(iscr, segs)
+}
+
+// uppForSession returns the SAIP UPP to seal into the BPP. It prefers
+// a prepared profile (built by profile-builder, carrying the
+// subscriber's PE-USIM / PE-AKAParameter credentials) resolved by
+// ICCID; the request's ICCID wins, falling back to the session's.
+// When no prepared profile matches, it returns a header-only
+// placeholder so the lab path needs no profile-builder.
+func (s *Server) uppForSession(sess *session.Session, iccid string) ([]byte, error) {
+	if iccid == "" {
+		iccid = sess.ICCID
+	}
+	if iccid != "" {
+		if prep, err := s.profiles.Get(iccid); err == nil {
+			return prep.UPP, nil
+		}
+	}
+	return placeholderUPP(sess)
+}
+
+// placeholderUPP builds the header-only SAIP UPP used when no profile
+// has been prepared. Its ICCID is the session's, or a 0xFF... flag so
+// a hardware bench notices the profile carries no credentials.
+func placeholderUPP(sess *session.Session) ([]byte, error) {
+	hdr := saip.ProfileHeader{
+		MajorVersion:           saip.SAIPMajorVersion,
+		MinorVersion:           saip.SAIPMinorVersion,
+		ProfileType:            "Aether In-Tree Test Profile",
+		ICCID:                  sessionICCIDBytes(sess),
+		EUICCMandatoryServices: []string{"contactless"},
+	}
+	pkg, err := saip.Build(hdr)
+	if err != nil {
+		return nil, fmt.Errorf("build placeholder SAIP UPP: %w", err)
+	}
+	upp, err := pkg.MarshalDER()
+	if err != nil {
+		return nil, fmt.Errorf("marshal placeholder SAIP UPP: %w", err)
+	}
+	return upp, nil
+}
+
+// handlePrepareProfile is the in-tree stand-in for ES2+ DownloadOrder
+// + ConfirmOrder: it builds a profile from a profile-builder template
+// + subscriber data and stores it keyed by ICCID, ready for the eUICC
+// that later downloads it. Requires Config.ProfileBuilder; returns
+// 501 otherwise so lab deployments without profile-builder are honest.
+func (s *Server) handlePrepareProfile(w http.ResponseWriter, r *http.Request) {
+	if s.pb == nil {
+		writeProblem(w, http.StatusNotImplemented, "profile preparation requires --profile-builder; see services/smdp-plus/README.md")
+		return
+	}
+	var req smdpv1.PrepareProfileRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if req.Subscriber.ICCID == "" {
+		writeProblem(w, http.StatusBadRequest, "subscriber.iccid required")
+		return
+	}
+	template := req.Template
+	if template == "" {
+		template = s.defaultTemplate
+	}
+	if template == "" {
+		writeProblem(w, http.StatusBadRequest, "no template given and no default template configured")
+		return
+	}
+
+	built, err := s.pb.Build(r.Context(), template, pbclient.SubscriberData{
+		IMSI:   req.Subscriber.IMSI,
+		ICCID:  req.Subscriber.ICCID,
+		MSISDN: req.Subscriber.MSISDN,
+		Ki:     req.Subscriber.Ki,
+		OPc:    req.Subscriber.OPc,
+	})
+	if err != nil {
+		writeProblem(w, http.StatusBadGateway, fmt.Sprintf("profile-builder: %v", err))
+		return
+	}
+	if err := s.profiles.Put(&profile.Prepared{ICCID: req.Subscriber.ICCID, UPP: built.SAIP}); err != nil {
+		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("store prepared profile: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, smdpv1.PrepareProfileResponse{
+		ICCID: req.Subscriber.ICCID,
+		Note:  "prepared via template " + template,
+	})
 }
 
 // sessionICCIDBytes returns the 10-byte nibble-swapped ICCID for

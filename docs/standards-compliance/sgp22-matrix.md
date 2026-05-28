@@ -33,7 +33,7 @@ Status legend:
 | ------- | ---------------------------------------------- | -------- | ------------- |
 | §4.1    | Components                                     | Aligned  | `docs/architecture/` |
 | §4.5    | Certificates and PKI                           | Planned  | `services/certmgr/` |
-| §4.6    | Identifiers                                    | Planned  | `pkg/saip/` |
+| §4.6    | Identifiers                                    | Partial — ICCID, IMSI, PLMN carried in SAIP (PE-USIM); EF packing pending | `pkg/saip/` |
 
 ## §5 Functions
 
@@ -52,7 +52,7 @@ Status legend:
 | §5.6.2  | ES9+ AuthenticateClient                        | Partial — chain + signature + serverChallenge replay defense | `services/smdp-plus/` |
 | §5.7.5  | AuthenticateServerResponse processing          | Partial — fields verified via JSON envelope (outer SEQUENCE pending Annex B) | `services/smdp-plus/internal/signing/euicc.go` |
 | §5.7.13 | EuiccSigned1 (verifier side)                   | Implemented | `services/smdp-plus/internal/signing/euicc.go` |
-| §5.6.3  | ES9+ GetBoundProfilePackage                    | NotImplemented (501) | `services/smdp-plus/` (BPP pending SAIP codec) |
+| §5.6.3  | ES9+ GetBoundProfilePackage                    | Partial — full BPP assembly (ECKA → SCP03t → sealed SAIP) when DPpb configured; honest 501 in lab mode | `services/smdp-plus/` |
 | §5.6.5  | ES9+ HandleNotification                        | Skeleton | `services/smdp-plus/` |
 | §5.7.13 | ServerSigned1 (ASN.1 + signing)                | Implemented | `services/smdp-plus/internal/signing/` |
 | §H.5    | ECDSA-SHA-256 over signed payloads             | Implemented | `services/smdp-plus/internal/signing/`, `pkg/hsmclient/` |
@@ -75,7 +75,7 @@ Status legend:
 | Annex   | Title                                          | Status   | Code location |
 | ------- | ---------------------------------------------- | -------- | ------------- |
 | A       | RSP session state machine                      | Planned  | `services/smdp-plus/state/` |
-| B       | ASN.1 data types                               | Planned  | `pkg/asn1/sgp22/` |
+| B       | ASN.1 data types                               | Partial — SAIP ProfilePackage (header, PE-USIM, PE-AKAParameter, PEEnd) round-trips; richer ProfileElements + EF framing pending | `pkg/saip/`, `pkg/asn1/sgp22/` |
 | H       | Certificate profiles                           | Planned  | `services/certmgr/` |
 
 ## How this matrix gets updated

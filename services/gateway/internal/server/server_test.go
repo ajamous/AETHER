@@ -59,6 +59,110 @@ func TestGateway_DownloadOrder_HappyPath(t *testing.T) {
 	}
 }
 
+// TestGateway_DownloadOrder_PreparesProfile confirms an order that
+// carries subscriber data is forwarded to smdp-plus's prepare
+// endpoint with the right shape, and the returned ICCID flows back.
+func TestGateway_DownloadOrder_PreparesProfile(t *testing.T) {
+	var gotPath string
+	var gotPrep smdpPrepareRequest
+	smdp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields() // mirror smdp-plus: catches shape drift
+		if err := dec.Decode(&gotPrep); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(smdpPrepareResponse{ICCID: gotPrep.Subscriber.ICCID})
+	}))
+	defer smdp.Close()
+
+	s, _ := New(Config{SMDPPlus: smdp.URL})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+
+	body, _ := json.Marshal(DownloadOrderRequest{
+		ICCID:       "8900000000000000007",
+		ProfileType: "lab-mvno",
+		Subscriber: &OrderSubscriber{
+			IMSI: "001010000000007",
+			Ki:   bytes.Repeat([]byte{0x11}, 16),
+			OPc:  bytes.Repeat([]byte{0x22}, 16),
+		},
+	})
+	resp, err := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	if gotPath != "/v1/profiles/prepare" {
+		t.Errorf("forwarded path = %q", gotPath)
+	}
+	if gotPrep.Template != "lab-mvno" {
+		t.Errorf("template = %q, want lab-mvno", gotPrep.Template)
+	}
+	if gotPrep.Subscriber.ICCID != "8900000000000000007" || gotPrep.Subscriber.IMSI != "001010000000007" {
+		t.Errorf("subscriber not forwarded: %+v", gotPrep.Subscriber)
+	}
+	if !bytes.Equal(gotPrep.Subscriber.Ki, bytes.Repeat([]byte{0x11}, 16)) {
+		t.Errorf("Ki not forwarded")
+	}
+	var out DownloadOrderResponse
+	json.NewDecoder(resp.Body).Decode(&out)
+	if out.ICCID != "8900000000000000007" {
+		t.Errorf("response ICCID = %q", out.ICCID)
+	}
+}
+
+// TestGateway_DownloadOrder_SubscriberWithoutSmdp confirms an order
+// with profile data but no smdp-plus configured fails clearly rather
+// than silently echoing.
+func TestGateway_DownloadOrder_SubscriberWithoutSmdp(t *testing.T) {
+	s, _ := New(Config{})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+	body, _ := json.Marshal(DownloadOrderRequest{
+		ICCID:      "8900000000000000007",
+		Subscriber: &OrderSubscriber{IMSI: "001010000000007"},
+	})
+	resp, err := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", resp.StatusCode)
+	}
+}
+
+// TestGateway_DownloadOrder_PropagatesSmdpError confirms a non-2xx
+// from smdp-plus prepare surfaces through the gateway.
+func TestGateway_DownloadOrder_PropagatesSmdpError(t *testing.T) {
+	smdp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{"detail": "bad subscriber"})
+	}))
+	defer smdp.Close()
+	s, _ := New(Config{SMDPPlus: smdp.URL})
+	srv := httptest.NewServer(s.Routes())
+	defer srv.Close()
+	body, _ := json.Marshal(DownloadOrderRequest{
+		ICCID:      "8900000000000000007",
+		Subscriber: &OrderSubscriber{IMSI: "bad"},
+	})
+	resp, err := http.Post(srv.URL+"/gsma/rsp2/es2plus/downloadOrder", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 propagated", resp.StatusCode)
+	}
+}
+
 func TestGateway_DownloadOrder_RejectsEmpty(t *testing.T) {
 	s, _ := New(Config{})
 	srv := httptest.NewServer(s.Routes())

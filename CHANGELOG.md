@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+Profile credentials flow end to end — BSS order to sealed BPP:
+- The BPP closed its wire path but sealed a header-only placeholder
+  UPP, so a downloaded profile carried no subscriber credentials.
+  This series carries the operator's IMSI / Ki / OPc all the way
+  through to a BPP the eUICC can decrypt.
+- `pkg/saip` gains two credential-carrying ProfileElements:
+  `PE-USIM` (IMSI + home PLMN) and `PE-AKAParameter` (Milenage
+  Ki + OPc), each a CHOICE-tagged DER element with a round-trip
+  test. `profile-builder.BuildUPP` now embeds them, so the
+  subscriber data it validated then previously discarded reaches
+  the SAIP UPP.
+- `pkg/pbclient`: profile-builder HTTP client, mirroring
+  `pkg/hsmclient` / `pkg/certmgrclient`.
+- smdp-plus `POST /v1/profiles/prepare` (in-tree stand-in for ES2+
+  DownloadOrder): builds a profile via profile-builder and holds it
+  in a prepared-profile store keyed by ICCID. `getBoundProfilePackage`
+  seals that real credential-carrying UPP when one matches the
+  request's ICCID, falling back to the header-only placeholder
+  otherwise (lab path unchanged). Honest 501 when no profile-builder
+  is configured.
+- `bpp.SharedInfo` extracts the KDF shared-info as the single source
+  of truth shared between sealer and opener; `bpp.Disassemble
+  BoundProfilePackage` decodes a BPP back into its preamble +
+  segments (symmetric with assembly; useful for audit/replay).
+- gateway ES2+ DownloadOrder forwards to smdp-plus
+  `/v1/profiles/prepare` when the order carries a subscriber block
+  (`profile_type` → template); orders without one keep the echo
+  skeleton. Adds the `OrderSubscriber` wire type + OpenAPI schema.
+- New end-to-end server test prepares a profile, drives initiate →
+  authenticate → getBPP, then **decrypts** the returned BPP with a
+  test eUICC ephemeral key and asserts the operator's IMSI/Ki/OPc
+  round-trip — the credential-delivery proof without hardware.
+- Fidelity unchanged: round-trip / decrypt is the locked contract;
+  spec-precise SCP03t per-segment AAD, the EF-level TCA §B framing,
+  and matchingId-based resolution of the prepared profile remain
+  documented follow-ups.
+
 smdp-plus `getBoundProfilePackage` — the BPP critical path closes:
 - This is the milestone PR. Every prior PR in the series shipped
   one layer of the BPP construction in isolation (SAIP UPP,
