@@ -130,8 +130,8 @@ func TestBuildUPP_EmitsValidSAIP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("saip.Decode: %v", err)
 	}
-	if len(elems) != 2 {
-		t.Fatalf("got %d SAIP elements, want 2 (header + end)", len(elems))
+	if len(elems) != 4 {
+		t.Fatalf("got %d SAIP elements, want 4 (header + usim + aka + end)", len(elems))
 	}
 	hdr, ok := saip.DecodeHeader(elems[0])
 	if !ok {
@@ -146,8 +146,59 @@ func TestBuildUPP_EmitsValidSAIP(t *testing.T) {
 	if len(hdr.ICCID) != 10 {
 		t.Errorf("ICCID = %d bytes, want 10", len(hdr.ICCID))
 	}
-	if !saip.IsEnd(elems[1]) {
-		t.Error("element[1] should be PEEnd")
+	if !saip.IsEnd(elems[3]) {
+		t.Error("element[3] should be PEEnd")
+	}
+}
+
+// TestBuildUPP_CarriesSubscriberCredentials confirms the IMSI, PLMN,
+// Ki, and OPc the operator supplies actually reach the SAIP UPP —
+// previously BuildUPP validated then discarded them, so a downloaded
+// profile carried no credentials.
+func TestBuildUPP_CarriesSubscriberCredentials(t *testing.T) {
+	p, _ := Parse([]byte(sampleYAML))
+	sub := &SubscriberData{
+		IMSI:   "001019912345678",
+		ICCID:  "8900000000000000001",
+		MSISDN: "1234567",
+		Ki:     bytes.Repeat([]byte{0xCC}, 16),
+		OPc:    bytes.Repeat([]byte{0xDD}, 16),
+	}
+	upp, err := BuildUPP(p, sub)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	elems, err := saip.Decode(upp.SAIP)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(elems) != 4 {
+		t.Fatalf("got %d elements, want 4", len(elems))
+	}
+
+	usim, ok := saip.DecodeUSIM(elems[1])
+	if !ok {
+		t.Fatal("element[1] should be PE-USIM")
+	}
+	if usim.IMSI != sub.IMSI {
+		t.Errorf("USIM IMSI = %q, want %q", usim.IMSI, sub.IMSI)
+	}
+	if usim.MCC != p.Network.MCC || usim.MNC != p.Network.MNC {
+		t.Errorf("USIM PLMN = %s/%s, want %s/%s", usim.MCC, usim.MNC, p.Network.MCC, p.Network.MNC)
+	}
+
+	aka, ok := saip.DecodeAKAParameter(elems[2])
+	if !ok {
+		t.Fatal("element[2] should be PE-AKAParameter")
+	}
+	if !bytes.Equal(aka.Ki, sub.Ki) {
+		t.Errorf("AKA Ki not propagated")
+	}
+	if !bytes.Equal(aka.OPc, sub.OPc) {
+		t.Errorf("AKA OPc not propagated")
+	}
+	if aka.AlgorithmID != saip.AKAAlgorithmMilenage {
+		t.Errorf("AKA algorithm = %d, want Milenage", aka.AlgorithmID)
 	}
 }
 
