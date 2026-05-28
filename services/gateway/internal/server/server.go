@@ -7,6 +7,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -243,8 +244,45 @@ type DownloadOrderRequest struct {
 	EID         string `json:"eid"`
 	ICCID       string `json:"iccid"`
 	ProfileType string `json:"profile_type"`
+
+	// Subscriber, when present, makes the gateway prepare the profile
+	// on the SM-DP+ (POST /v1/profiles/prepare). In a fully
+	// spec-faithful deployment the profile content lives in the
+	// SM-DP+'s inventory and ES2+ references it by ICCID / profile_type;
+	// the in-tree flow carries it on the wire so a BSS can drive the
+	// whole download path without a separate inventory-load step.
+	Subscriber *OrderSubscriber `json:"subscriber,omitempty"`
 }
+
+// OrderSubscriber is the per-activation data the in-tree ES2+ flow
+// carries so the SM-DP+ can build the profile. profile_type names the
+// SM-DP+ template.
+type OrderSubscriber struct {
+	IMSI   string `json:"imsi"`
+	MSISDN string `json:"msisdn"`
+	Ki     []byte `json:"ki"`
+	OPc    []byte `json:"opc"`
+}
+
 type DownloadOrderResponse struct {
+	ICCID string `json:"iccid"`
+}
+
+// smdpPrepareRequest/Response mirror smdp-plus's POST
+// /v1/profiles/prepare contract. The gateway owns this shape as a
+// client; it must match smdp-plus's DisallowUnknownFields decoder.
+type smdpPrepareRequest struct {
+	Template   string                `json:"template,omitempty"`
+	Subscriber smdpPrepareSubscriber `json:"subscriber"`
+}
+type smdpPrepareSubscriber struct {
+	IMSI   string `json:"imsi"`
+	ICCID  string `json:"iccid"`
+	MSISDN string `json:"msisdn"`
+	Ki     []byte `json:"ki"`
+	OPc    []byte `json:"opc"`
+}
+type smdpPrepareResponse struct {
 	ICCID string `json:"iccid"`
 }
 
@@ -257,8 +295,43 @@ func (s *Server) handleDownloadOrder(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadRequest, "iccid or profile_type required")
 		return
 	}
-	// Real implementation: reserve a profile from inventory, persist
-	// the order, return the ICCID. Skeleton response echoes back.
+
+	// When the order carries profile data, prepare it on the SM-DP+.
+	if req.Subscriber != nil {
+		if s.smdpPlus == "" {
+			writeProblem(w, http.StatusServiceUnavailable, "smdp-plus not configured; cannot prepare profile")
+			return
+		}
+		if req.ICCID == "" {
+			writeProblem(w, http.StatusBadRequest, "iccid required to prepare a profile")
+			return
+		}
+		prep := smdpPrepareRequest{
+			Template: req.ProfileType,
+			Subscriber: smdpPrepareSubscriber{
+				IMSI:   req.Subscriber.IMSI,
+				ICCID:  req.ICCID,
+				MSISDN: req.Subscriber.MSISDN,
+				Ki:     req.Subscriber.Ki,
+				OPc:    req.Subscriber.OPc,
+			},
+		}
+		var out smdpPrepareResponse
+		status, err := s.postJSON(r.Context(), s.smdpPlus+"/v1/profiles/prepare", prep, &out)
+		if err != nil {
+			writeProblem(w, http.StatusBadGateway, fmt.Sprintf("smdp-plus prepare: %v", err))
+			return
+		}
+		if status/100 != 2 {
+			writeProblem(w, status, fmt.Sprintf("smdp-plus prepare returned %d", status))
+			return
+		}
+		writeJSON(w, http.StatusOK, DownloadOrderResponse{ICCID: out.ICCID})
+		return
+	}
+
+	// Skeleton path: reserve a profile from inventory (not yet
+	// implemented); echo the ICCID back.
 	writeJSON(w, http.StatusOK, DownloadOrderResponse{ICCID: req.ICCID})
 }
 
@@ -349,6 +422,33 @@ func (s *Server) upstream(name string) string {
 		return s.eim
 	}
 	return ""
+}
+
+// postJSON sends body as JSON to dest and decodes a 2xx response into
+// dst (when non-nil). Returns the upstream status code. Used for
+// transformed upstream calls (e.g. ES2+ DownloadOrder → smdp-plus
+// prepare) where the raw proxy in do() doesn't fit.
+func (s *Server) postJSON(ctx context.Context, dest string, body, dst any) (int, error) {
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, dest, bytes.NewReader(buf))
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if dst != nil && resp.StatusCode/100 == 2 {
+		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+			return resp.StatusCode, err
+		}
+	}
+	return resp.StatusCode, nil
 }
 
 func (s *Server) do(w http.ResponseWriter, r *http.Request, dest string) {

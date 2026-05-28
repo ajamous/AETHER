@@ -51,9 +51,10 @@ What remains honestly NOT done:
 - The per-segment SCP03t AAD layout matches the spec in shape but is
   not yet cross-vendor verified against a real eUICC (hardware-bench
   follow-up).
-- ES2+ DownloadOrder/ConfirmOrder in the gateway does not yet drive
-  `/v1/profiles/prepare`; the prepared profile is keyed by ICCID
-  directly until that lands.
+- The gateway's ES2+ DownloadOrder forwards to `/v1/profiles/prepare`
+  when the order carries subscriber data; the prepared profile is
+  keyed by ICCID, and the eUICC's getBoundProfilePackage resolves it
+  by ICCID directly (matchingId-based resolution is the follow-up).
 
 ## Running
 

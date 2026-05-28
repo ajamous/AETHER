@@ -105,10 +105,35 @@ components:
           example: "8900000000000000001"
         profile_type:
           type: string
-          description: Profile type to reserve from inventory.
+          description: Profile type to reserve from inventory. Names the SM-DP+ template when `subscriber` is present.
+        subscriber:
+          $ref: '#/components/schemas/OrderSubscriber'
       anyOf:
         - required: [iccid]
         - required: [profile_type]
+
+    OrderSubscriber:
+      type: object
+      description: >-
+        Per-activation data the in-tree ES2+ flow carries so the SM-DP+ can
+        build the profile (forwarded to POST /v1/profiles/prepare). In a fully
+        spec-faithful deployment the profile content lives in the SM-DP+'s
+        inventory and is referenced by iccid/profile_type rather than carried
+        on the wire.
+      properties:
+        imsi:
+          type: string
+          description: 15-digit IMSI.
+        msisdn:
+          type: string
+        ki:
+          type: string
+          format: byte
+          description: 16-byte Milenage subscriber key (base64).
+        opc:
+          type: string
+          format: byte
+          description: 16-byte Milenage OPc (base64).
 
     DownloadOrderResponse:
       type: object
