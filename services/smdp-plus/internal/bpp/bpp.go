@@ -323,3 +323,169 @@ func derLength(n int) []byte {
 	}
 	return append([]byte{0x80 | byte(len(lenBytes))}, lenBytes...)
 }
+
+// SharedInfo builds the KDF shared-info bytes that both the SM-DP+
+// and the eUICC derive session keys over. It binds the SCP03t key
+// parameters (keyType / keyLength / keyUsage) and the session's
+// transaction id so the two halves agree; if they don't, every BPP
+// segment fails GCM authentication on the eUICC. transactionID is
+// the session's hex transaction id string.
+//
+// This is the single source of truth shared between buildBPP (which
+// seals) and any verifier (which opens, e.g. DisassembleBoundProfile
+// Package callers). The exact §H.4 TLV-tagged layout is the
+// hardware-bench follow-up; this concatenation matches the spec in
+// shape (key-binding inputs → KDF input) and round-trips against
+// itself.
+func SharedInfo(transactionID string) []byte {
+	out := make([]byte, 0, len(KeyTypeAESGCM)+len(KeyLengthAES128)+len(KeyUsageQualifierEncryptAndIntegrity)+len(transactionID))
+	out = append(out, KeyTypeAESGCM...)
+	out = append(out, KeyLengthAES128...)
+	out = append(out, KeyUsageQualifierEncryptAndIntegrity...)
+	out = append(out, transactionID...)
+	return out
+}
+
+// tlv is one parsed tag-length-value triple.
+type tlv struct {
+	class       byte // classUniversal / classApplication / classContextSpecific
+	constructed bool
+	tagNumber   int
+	body        []byte
+}
+
+// readTLV parses the leading TLV from b and returns it plus the bytes
+// remaining after it. Handles short- and high-tag-number forms and
+// definite DER lengths.
+func readTLV(b []byte) (tlv, []byte, error) {
+	if len(b) < 2 {
+		return tlv{}, nil, errors.New("bpp: TLV too short")
+	}
+	first := b[0]
+	class := first & 0xC0
+	constructed := first&0x20 != 0
+	tagNumber := int(first & 0x1F)
+	off := 1
+	if tagNumber == 0x1F {
+		tagNumber = 0
+		for {
+			if off >= len(b) {
+				return tlv{}, nil, errors.New("bpp: truncated high-tag-number tag")
+			}
+			c := b[off]
+			tagNumber = tagNumber<<7 | int(c&0x7F)
+			off++
+			if c&0x80 == 0 {
+				break
+			}
+		}
+	}
+	bodyLen, lenHdr, err := readDERLength(b[off:])
+	if err != nil {
+		return tlv{}, nil, err
+	}
+	off += lenHdr
+	if off+bodyLen > len(b) {
+		return tlv{}, nil, errors.New("bpp: TLV length exceeds input")
+	}
+	return tlv{class: class, constructed: constructed, tagNumber: tagNumber, body: b[off : off+bodyLen]}, b[off+bodyLen:], nil
+}
+
+// readDERLength decodes a definite-form DER length, returning the
+// length value and the number of octets the length header consumed.
+func readDERLength(b []byte) (length, headerLen int, err error) {
+	if len(b) == 0 {
+		return 0, 0, errors.New("bpp: missing length octet")
+	}
+	first := b[0]
+	if first < 0x80 {
+		return int(first), 1, nil
+	}
+	n := int(first & 0x7F)
+	if n == 0 {
+		return 0, 0, errors.New("bpp: indefinite length not permitted in DER")
+	}
+	if len(b) < 1+n {
+		return 0, 0, errors.New("bpp: truncated length octets")
+	}
+	v := 0
+	for i := 0; i < n; i++ {
+		v = v<<8 | int(b[1+i])
+	}
+	return v, 1 + n, nil
+}
+
+// DisassembleBoundProfilePackage reverses AssembleBoundProfilePackage:
+// it parses an [APPLICATION 54] BPP back into its
+// InitialiseSecureChannelRequest preamble and the ordered
+// sequenceOf88 segment bodies (the AES-128-GCM-sealed UPP segments).
+//
+// Used by tests to confirm a freshly-assembled BPP round-trips, and
+// by an audit/replay tool to confirm a captured BPP decodes to the
+// fields an operator expects. The empty trailing sequenceOf86 is
+// tolerated and ignored.
+func DisassembleBoundProfilePackage(der []byte) (*InitialiseSecureChannelRequest, [][]byte, error) {
+	outer, rest, err := readTLV(der)
+	if err != nil {
+		return nil, nil, fmt.Errorf("bpp: outer: %w", err)
+	}
+	if len(rest) != 0 {
+		return nil, nil, errors.New("bpp: trailing bytes after BoundProfilePackage")
+	}
+	if outer.class != classApplication || !outer.constructed || outer.tagNumber != 54 {
+		return nil, nil, fmt.Errorf("bpp: outer tag number %d (class 0x%02x), want [APPLICATION 54] constructed", outer.tagNumber, outer.class)
+	}
+
+	var iscr *InitialiseSecureChannelRequest
+	var seqOf88 [][]byte
+
+	body := outer.body
+	for len(body) > 0 {
+		t, next, err := readTLV(body)
+		if err != nil {
+			return nil, nil, fmt.Errorf("bpp: inner field: %w", err)
+		}
+		body = next
+
+		switch {
+		case t.class == classContextSpecific && t.tagNumber == 16:
+			// [16] carries the ISCR SEQUENCE body (the universal
+			// SEQUENCE tag was stripped during assembly); re-wrap it
+			// so UnmarshalInitialiseSecureChannelRequest sees a
+			// well-formed SEQUENCE.
+			iscrDER := append([]byte{0x30}, derLength(len(t.body))...)
+			iscrDER = append(iscrDER, t.body...)
+			parsed, err := UnmarshalInitialiseSecureChannelRequest(iscrDER)
+			if err != nil {
+				return nil, nil, fmt.Errorf("bpp: initialiseSecureChannelRequest: %w", err)
+			}
+			iscr = parsed
+		case t.class == classApplication && t.tagNumber == 24:
+			seg := t.body
+			for len(seg) > 0 {
+				child, srest, err := readTLV(seg)
+				if err != nil {
+					return nil, nil, fmt.Errorf("bpp: sequenceOf88 child: %w", err)
+				}
+				if child.class != classApplication || child.tagNumber != 8 {
+					return nil, nil, fmt.Errorf("bpp: sequenceOf88 child tag %d, want [APPLICATION 8]", child.tagNumber)
+				}
+				seqOf88 = append(seqOf88, append([]byte(nil), child.body...))
+				seg = srest
+			}
+		case t.class == classApplication && t.tagNumber == 26:
+			// sequenceOf86 — mandatory but empty in the shipping
+			// shape; nothing to extract.
+		default:
+			// Unknown optional field; ignore for forward-compat.
+		}
+	}
+
+	if iscr == nil {
+		return nil, nil, errors.New("bpp: BoundProfilePackage missing initialiseSecureChannelRequest")
+	}
+	if len(seqOf88) == 0 {
+		return nil, nil, errors.New("bpp: BoundProfilePackage missing sequenceOf88 segments")
+	}
+	return iscr, seqOf88, nil
+}

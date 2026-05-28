@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/ajamous/aether/pkg/certmgrclient v0.0.0-00010101000000-000000000000
 	github.com/ajamous/aether/pkg/hsmclient v0.0.0-00010101000000-000000000000
+	github.com/ajamous/aether/pkg/pbclient v0.0.0-00010101000000-000000000000
 	github.com/ajamous/aether/pkg/saip v0.0.0-00010101000000-000000000000
 	github.com/jackc/pgx/v5 v5.9.2
 )
@@ -19,6 +20,8 @@ require (
 )
 
 replace github.com/ajamous/aether/pkg/hsmclient => ../../pkg/hsmclient
+
+replace github.com/ajamous/aether/pkg/pbclient => ../../pkg/pbclient
 
 replace github.com/ajamous/aether/pkg/certmgrclient => ../../pkg/certmgrclient
 

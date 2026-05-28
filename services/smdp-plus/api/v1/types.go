@@ -80,6 +80,43 @@ type GetBoundProfilePackageRequest struct {
 	// directly. The handler validates length + first-byte before
 	// using it for ECKA.
 	EUICCOtpk []byte `json:"euicc_otpk,omitempty"`
+
+	// ICCID resolves which prepared profile to seal into the BPP.
+	// In SGP.22's full flow the matchingId from the activation code
+	// resolves the prepared profile server-side; until that lands,
+	// the in-tree/test path supplies the ICCID directly. When empty
+	// (or unknown to the prepared-profile store) the handler falls
+	// back to a header-only placeholder UPP.
+	ICCID string `json:"iccid,omitempty"`
+}
+
+// PrepareProfileRequest is the in-tree stand-in for ES2+
+// DownloadOrder + ConfirmOrder: it asks the SM-DP+ to build a profile
+// from a profile-builder template + subscriber data and hold it,
+// keyed by ICCID, for the eUICC that later downloads it. Served at
+// POST /v1/profiles/prepare (admin surface, not ES9+).
+type PrepareProfileRequest struct {
+	// Template is the profile-builder template name. Empty uses the
+	// SM-DP+'s configured default template.
+	Template   string            `json:"template,omitempty"`
+	Subscriber PrepareSubscriber `json:"subscriber"`
+}
+
+// PrepareSubscriber is the per-activation data merged with the
+// template. Mirrors profile-builder's SubscriberData.
+type PrepareSubscriber struct {
+	IMSI   string `json:"imsi"`
+	ICCID  string `json:"iccid"`
+	MSISDN string `json:"msisdn"`
+	Ki     []byte `json:"ki"`
+	OPc    []byte `json:"opc"`
+}
+
+// PrepareProfileResponse echoes the ICCID the prepared profile is
+// keyed by; the eUICC's later getBoundProfilePackage resolves it.
+type PrepareProfileResponse struct {
+	ICCID string `json:"iccid"`
+	Note  string `json:"_note,omitempty"`
 }
 
 // GetBoundProfilePackageResponse — SGP.22 §5.6.4.
