@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+SGP.22 spec-faithfulness follow-ups — matchingId, signed PDR, outer SEQUENCE:
+- **matchingId resolution (§4.1).** The prepared profile was
+  resolved only by ICCID. Real SGP.22 derives a matchingId from the
+  activation code and the SM-DP+ resolves prepared profiles from
+  it. `profile.Prepared` gains `MatchingID`; `profile.Store`
+  gains `GetByMatchingID` with an O(1) secondary index;
+  `POST /v1/profiles/prepare` mints a random matchingId when the
+  request omits one and returns the `LPA:1$<smdp address>$<matching id>`
+  activation code; `authenticateClient` binds the matchingId
+  (in-tree stand-in for ctxParams1) onto the session; buildBPP
+  resolves the prepared profile by matchingId first, ICCID next.
+  Gateway DownloadOrderResponse forwards matching_id +
+  activation_code when prepare ran.
+- **Signed PrepareDownloadResponse verification (§5.7.7).** The
+  eUICC otPK was supplied directly on the BPP request — a lab
+  convenience. Add the codec
+  `signing.{EuiccSigned2,PrepareDownloadResponseOk}` (asn1.RawValue
+  around EuiccSigned2 preserves the exact signed bytes) and
+  `signing.VerifyPrepareDownloadResponse`, which verifies ECDSA-
+  SHA-256 against the eUICC certificate captured at
+  authenticateClient time and confirms the transactionId binding.
+  Session model + Postgres schema gain `EUICCCertDER`. The handler
+  prefers a verified PDR otpk over a raw one; tampered, wrong-cert,
+  and wrong-txid blobs are rejected.
+- **AuthenticateServerResponse outer SEQUENCE (§5.7.5 / Annex B).**
+  The handler accepted four signed pieces as separate JSON fields
+  — a shape no real LPA emits. Add
+  `signing.{Marshal,Unmarshal}AuthenticateResponseOk` (the
+  spec-faithful SEQUENCE { euiccSigned1, euiccSignature1,
+  euiccCertificate, eumCertificate }, with asn1.RawValue around
+  each inner SEQUENCE so signed bytes and X.509 DER survive
+  round-trip). When the request carries
+  `authenticate_server_response`, the handler parses it and uses
+  the extracted four pieces; the explicit-field path stays as a
+  lab seam.
+- New end-to-end tests for each: matchingId-only resolution
+  (no ICCID on the BPP request), signed PDR happy path + forged
+  PDR rejection (401), outer SEQUENCE happy path + malformed (400).
+  Each decrypts the BPP and confirms IMSI/Ki/OPc round-trip where
+  applicable.
+
 Profile credentials flow end to end — BSS order to sealed BPP:
 - The BPP closed its wire path but sealed a header-only placeholder
   UPP, so a downloaded profile carried no subscriber credentials.
