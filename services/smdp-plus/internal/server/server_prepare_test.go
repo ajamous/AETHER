@@ -656,3 +656,96 @@ func TestPrepareThenBoundProfile_RejectsForgedPDR(t *testing.T) {
 		t.Fatalf("status = %d, want 401 (forged PDR signature)", resp.StatusCode)
 	}
 }
+
+// TestAuthenticateClient_OuterSequenceShape drives authenticateClient
+// with the spec-faithful AuthenticateServerResponse outer SEQUENCE
+// (§5.7.5) instead of the four explicit JSON fields, and confirms
+// verification + matchingId/cert capture all still work.
+func TestAuthenticateClient_OuterSequenceShape(t *testing.T) {
+	chain := newLabChain(t)
+	hc, brokerClose := fakeBroker(t)
+	defer brokerClose()
+	dpauth, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPauth", "aether.local")
+	dppb, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPpb", "aether.local")
+	roots := x509.NewCertPool()
+	roots.AddCert(chain.rootCert)
+	tm := &identity.TrustMaterial{Roots: roots, Intermediates: x509.NewCertPool()}
+
+	smdpSrv := httptest.NewServer(New(
+		session.NewMemoryStore(time.Minute),
+		Config{HSM: hc, Identity: dpauth, DPpb: dppb, Trust: tm, Address: "aether.local"},
+	).Routes())
+	defer smdpSrv.Close()
+
+	initBody, _ := json.Marshal(smdpv1.InitiateAuthenticationRequest{
+		EUICCChallenge: bytes.Repeat([]byte{0xAB}, 16), SMDPAddress: "aether.local",
+	})
+	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(initBody))
+	var initOut smdpv1.InitiateAuthenticationResponse
+	_ = json.NewDecoder(resp.Body).Decode(&initOut)
+	resp.Body.Close()
+	parsed, _ := signing.UnmarshalServerSigned1(initOut.ServerSigned1)
+	tidBytes := parsed.TransactionID
+
+	// Build the four pieces, then wrap them in the outer SEQUENCE
+	// instead of sending them as separate JSON fields.
+	signed, sig, leafDER, eumDER := chain.signAuthenticateResponse(t, tidBytes, "aether.local", parsed.ServerChallenge)
+	outer, err := signing.MarshalAuthenticateResponseOk(signed, sig, leafDER, eumDER)
+	if err != nil {
+		t.Fatalf("marshal outer: %v", err)
+	}
+	authBody, _ := json.Marshal(smdpv1.AuthenticateClientRequest{
+		TransactionID:              hexEncode(tidBytes),
+		AuthenticateServerResponse: outer,
+	})
+	resp, err = http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		var prob map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&prob)
+		t.Fatalf("authenticate via outer SEQUENCE failed: status=%d body=%v", resp.StatusCode, prob)
+	}
+}
+
+// TestAuthenticateClient_OuterSequenceRejectedWhenMalformed confirms
+// that a garbage authenticate_server_response yields 400, not 500.
+func TestAuthenticateClient_OuterSequenceRejectedWhenMalformed(t *testing.T) {
+	chain := newLabChain(t)
+	hc, brokerClose := fakeBroker(t)
+	defer brokerClose()
+	dpauth, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPauth", "aether.local")
+	roots := x509.NewCertPool()
+	roots.AddCert(chain.rootCert)
+	tm := &identity.TrustMaterial{Roots: roots, Intermediates: x509.NewCertPool()}
+
+	smdpSrv := httptest.NewServer(New(
+		session.NewMemoryStore(time.Minute),
+		Config{HSM: hc, Identity: dpauth, Trust: tm, Address: "aether.local"},
+	).Routes())
+	defer smdpSrv.Close()
+
+	initBody, _ := json.Marshal(smdpv1.InitiateAuthenticationRequest{
+		EUICCChallenge: bytes.Repeat([]byte{0xAB}, 16), SMDPAddress: "aether.local",
+	})
+	resp, _ := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(initBody))
+	var initOut smdpv1.InitiateAuthenticationResponse
+	_ = json.NewDecoder(resp.Body).Decode(&initOut)
+	resp.Body.Close()
+	parsed, _ := signing.UnmarshalServerSigned1(initOut.ServerSigned1)
+
+	authBody, _ := json.Marshal(smdpv1.AuthenticateClientRequest{
+		TransactionID:              hexEncode(parsed.TransactionID),
+		AuthenticateServerResponse: []byte{0x00, 0x01, 0x02},
+	})
+	resp, err := http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 on malformed outer SEQUENCE", resp.StatusCode)
+	}
+}

@@ -50,9 +50,9 @@ Status legend:
 | §5.5.4  | ES11 AuthenticateClient                        | Skeleton (no signing)   | `services/smds/` |
 | §5.6.1  | ES9+ InitiateAuthentication                    | Partial — payload built and signed | `services/smdp-plus/` |
 | §5.6.2  | ES9+ AuthenticateClient                        | Partial — chain + signature + serverChallenge replay defense | `services/smdp-plus/` |
-| §5.7.5  | AuthenticateServerResponse processing          | Partial — fields verified via JSON envelope (outer SEQUENCE pending Annex B) | `services/smdp-plus/internal/signing/euicc.go` |
+| §5.7.5  | AuthenticateServerResponse processing          | Implemented — outer SEQUENCE (Annex B) accepted; explicit four-field JSON path remains as lab seam | `services/smdp-plus/internal/signing/auth_server_resp.go` |
 | §5.7.13 | EuiccSigned1 (verifier side)                   | Implemented | `services/smdp-plus/internal/signing/euicc.go` |
-| §5.6.3  | ES9+ GetBoundProfilePackage                    | Partial — full BPP assembly (ECKA → SCP03t → sealed SAIP) when DPpb configured; honest 501 in lab mode | `services/smdp-plus/` |
+| §5.6.3  | ES9+ GetBoundProfilePackage                    | Partial — full BPP assembly (ECKA → SCP03t → sealed SAIP) when DPpb configured; matchingId or ICCID resolves the prepared profile; signed PrepareDownloadResponse (§5.7.7) verified against the session's eUICC cert when present; raw otpk path remains as lab seam; honest 501 in lab mode | `services/smdp-plus/` |
 | §5.6.5  | ES9+ HandleNotification                        | Skeleton | `services/smdp-plus/` |
 | §5.7.13 | ServerSigned1 (ASN.1 + signing)                | Implemented | `services/smdp-plus/internal/signing/` |
 | §H.5    | ECDSA-SHA-256 over signed payloads             | Implemented | `services/smdp-plus/internal/signing/`, `pkg/hsmclient/` |

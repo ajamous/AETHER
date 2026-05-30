@@ -301,15 +301,32 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 	}
 
 	if s.verificationEnabled() {
-		if len(req.EuiccSigned1DER) == 0 || len(req.EuiccSignature1) == 0 ||
-			len(req.EuiccCertDER) == 0 || len(req.EumCertDER) == 0 {
+		// Two intake shapes: a spec-faithful AuthenticateServerResponse
+		// outer SEQUENCE (§5.7.5) or the explicit four-field JSON
+		// envelope. The blob wins when present; the explicit fields
+		// stay as a lab seam for harnesses that don't build the outer
+		// SEQUENCE.
+		euiccSigned1DER := req.EuiccSigned1DER
+		euiccSignature1 := req.EuiccSignature1
+		euiccCertDER := req.EuiccCertDER
+		eumCertDER := req.EumCertDER
+		if len(req.AuthenticateServerResponse) > 0 {
+			s1, sig1, leaf, eum, err := signing.UnmarshalAuthenticateResponseOk(req.AuthenticateServerResponse)
+			if err != nil {
+				writeProblem(w, http.StatusBadRequest, fmt.Sprintf("authenticate_server_response: %v", err))
+				return
+			}
+			euiccSigned1DER, euiccSignature1, euiccCertDER, eumCertDER = s1, sig1, leaf, eum
+		}
+		if len(euiccSigned1DER) == 0 || len(euiccSignature1) == 0 ||
+			len(euiccCertDER) == 0 || len(eumCertDER) == 0 {
 			writeProblem(w, http.StatusBadRequest,
-				"euicc_signed1, euicc_signature1, euicc_certificate, eum_certificate all required")
+				"supply authenticate_server_response or all of euicc_signed1, euicc_signature1, euicc_certificate, eum_certificate")
 			return
 		}
 		res, err := signing.VerifyEuiccAuthenticate(
-			req.EuiccSigned1DER, req.EuiccSignature1,
-			req.EuiccCertDER, req.EumCertDER,
+			euiccSigned1DER, euiccSignature1,
+			euiccCertDER, eumCertDER,
 			signing.VerifyOptions{
 				Roots:         s.trust.Roots,
 				Intermediates: s.trust.Intermediates,
@@ -327,6 +344,10 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 				"euiccSigned1.serverChallenge does not match the value issued in initiateAuthentication")
 			return
 		}
+		// Whichever shape arrived, retain the leaf cert bytes the
+		// verifier used so the §5.7.7 PrepareDownloadResponse
+		// verifier in getBoundProfilePackage can reach them.
+		req.EuiccCertDER = euiccCertDER
 	}
 
 	sess.State = session.StateAuthenticated
