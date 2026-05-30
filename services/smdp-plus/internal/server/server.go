@@ -338,6 +338,14 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 	if req.MatchingID != "" {
 		sess.MatchingID = req.MatchingID
 	}
+	// Stash the eUICC cert for §5.7.7 PrepareDownloadResponse
+	// verification at getBoundProfilePackage time. Only populated
+	// when verification was enabled and succeeded; lab paths that
+	// skip verification leave the field nil and PDR verification is
+	// not available for that session.
+	if s.verificationEnabled() && len(req.EuiccCertDER) > 0 {
+		sess.EUICCCertDER = append([]byte(nil), req.EuiccCertDER...)
+	}
 	if err := s.sessions.Update(sess); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("update: %v", err))
 		return
@@ -459,16 +467,38 @@ func (s *Server) handleGetBoundProfilePackage(w http.ResponseWriter, r *http.Req
 		writeProblem(w, http.StatusNotImplemented, "BPP generation requires --dppb-label; see services/smdp-plus/README.md")
 		return
 	}
-	if len(req.EUICCOtpk) == 0 {
-		writeProblem(w, http.StatusBadRequest, "euicc_otpk required (uncompressed P-256 point, 65 bytes)")
+
+	// Two paths to the eUICC otPK:
+	//   - signed PrepareDownloadResponse (§5.7.7): parse + verify
+	//     against the cert captured at authenticateClient time;
+	//     extract the otPK from EuiccSigned2.
+	//   - raw EUICCOtpk on the request: the in-tree convenience
+	//     path used by harnesses and lab flows without a session
+	//     cert; left in place so existing tests stay green.
+	euiccOtpk := req.EUICCOtpk
+	if len(req.PrepareDownloadResponse) > 0 {
+		txidBytes, err := hexDecode(sess.TransactionID)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("tid decode: %v", err))
+			return
+		}
+		verified, err := signing.VerifyPrepareDownloadResponse(req.PrepareDownloadResponse, sess.EUICCCertDER, txidBytes)
+		if err != nil {
+			writeProblem(w, http.StatusUnauthorized, fmt.Sprintf("PrepareDownloadResponse verification failed: %v", err))
+			return
+		}
+		euiccOtpk = verified.EuiccOtpk
+	}
+	if len(euiccOtpk) == 0 {
+		writeProblem(w, http.StatusBadRequest, "supply either prepare_download_response or euicc_otpk")
 		return
 	}
-	if len(req.EUICCOtpk) != 65 || req.EUICCOtpk[0] != 0x04 {
+	if len(euiccOtpk) != 65 || euiccOtpk[0] != 0x04 {
 		writeProblem(w, http.StatusBadRequest, "euicc_otpk must be uncompressed P-256 point (0x04 || X(32) || Y(32))")
 		return
 	}
 
-	der, err := s.buildBPP(r.Context(), sess, req.EUICCOtpk, req.ICCID)
+	der, err := s.buildBPP(r.Context(), sess, euiccOtpk, req.ICCID)
 	if err != nil {
 		slog.Default().Error("BPP assembly failed", slog.String("err", err.Error()))
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("BPP assembly: %v", err))

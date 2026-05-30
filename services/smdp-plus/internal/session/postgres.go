@@ -36,6 +36,12 @@ CREATE TABLE IF NOT EXISTS smdpp_sessions (
     iccid             TEXT NOT NULL DEFAULT ''
 );
 
+-- Added for §5.7.7 PrepareDownloadResponse verification: the eUICC
+-- cert captured at authenticateClient time. Nullable; existing rows
+-- and lab paths without verification leave it NULL.
+ALTER TABLE smdpp_sessions
+  ADD COLUMN IF NOT EXISTS euicc_cert_der BYTEA;
+
 CREATE INDEX IF NOT EXISTS smdpp_sessions_updated_at_idx
   ON smdpp_sessions (updated_at);
 `
@@ -90,12 +96,14 @@ func (s *PGStore) Create(sess *Session) error {
 	_, err := s.pool.Exec(context.Background(),
 		`INSERT INTO smdpp_sessions
 		   (transaction_id, state, created_at, updated_at,
-		    euicc_challenge, server_challenge, matching_id, iccid)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		    euicc_challenge, server_challenge, matching_id, iccid,
+		    euicc_cert_der)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		sess.TransactionID, string(sess.State),
 		sess.CreatedAt, sess.UpdatedAt,
 		sess.EUICCChallenge, sess.ServerChallenge,
-		sess.MatchingID, sess.ICCID)
+		sess.MatchingID, sess.ICCID,
+		sess.EUICCCertDER)
 	if err != nil {
 		return fmt.Errorf("smdpp/pg: create: %w", err)
 	}
@@ -107,7 +115,8 @@ func (s *PGStore) Create(sess *Session) error {
 func (s *PGStore) Get(tid string) (*Session, error) {
 	row := s.pool.QueryRow(context.Background(),
 		`SELECT transaction_id, state, created_at, updated_at,
-		        euicc_challenge, server_challenge, matching_id, iccid
+		        euicc_challenge, server_challenge, matching_id, iccid,
+		        euicc_cert_der
 		   FROM smdpp_sessions
 		  WHERE transaction_id = $1`, tid)
 	var (
@@ -121,6 +130,7 @@ func (s *PGStore) Get(tid string) (*Session, error) {
 		&sess.CreatedAt, &sess.UpdatedAt,
 		&sess.EUICCChallenge, &sess.ServerChallenge,
 		&matchingID, &iccid,
+		&sess.EUICCCertDER,
 	); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrNotFound
@@ -147,11 +157,12 @@ func (s *PGStore) Update(sess *Session) error {
 		        euicc_challenge = $4,
 		        server_challenge = $5,
 		        matching_id = $6,
-		        iccid = $7
+		        iccid = $7,
+		        euicc_cert_der = $8
 		  WHERE transaction_id = $1`,
 		sess.TransactionID, string(sess.State), sess.UpdatedAt,
 		sess.EUICCChallenge, sess.ServerChallenge,
-		sess.MatchingID, sess.ICCID)
+		sess.MatchingID, sess.ICCID, sess.EUICCCertDER)
 	if err != nil {
 		return fmt.Errorf("smdpp/pg: update: %w", err)
 	}

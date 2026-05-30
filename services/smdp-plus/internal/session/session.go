@@ -52,6 +52,12 @@ type Session struct {
 
 	// ICCID of the profile bound to this session.
 	ICCID string
+
+	// EUICCCertDER is the eUICC's leaf certificate, captured at
+	// authenticateClient time when verification succeeded. Used at
+	// getBoundProfilePackage time to verify the signed
+	// PrepareDownloadResponse the LPA forwards (§5.7.7).
+	EUICCCertDER []byte
 }
 
 // Store is the contract for session persistence. Implementations must
