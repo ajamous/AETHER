@@ -266,6 +266,12 @@ type OrderSubscriber struct {
 
 type DownloadOrderResponse struct {
 	ICCID string `json:"iccid"`
+	// MatchingID and ActivationCode are populated when the SM-DP+
+	// prepared the profile (i.e. the order carried a subscriber
+	// block). The BSS hands ActivationCode to the user as the
+	// SGP.22 §4.1 string "LPA:1$<smdp address>$<matching id>".
+	MatchingID     string `json:"matching_id,omitempty"`
+	ActivationCode string `json:"activation_code,omitempty"`
 }
 
 // smdpPrepareRequest/Response mirror smdp-plus's POST
@@ -283,7 +289,9 @@ type smdpPrepareSubscriber struct {
 	OPc    []byte `json:"opc"`
 }
 type smdpPrepareResponse struct {
-	ICCID string `json:"iccid"`
+	ICCID          string `json:"iccid"`
+	MatchingID     string `json:"matching_id"`
+	ActivationCode string `json:"activation_code"`
 }
 
 func (s *Server) handleDownloadOrder(w http.ResponseWriter, r *http.Request) {
@@ -326,7 +334,11 @@ func (s *Server) handleDownloadOrder(w http.ResponseWriter, r *http.Request) {
 			writeProblem(w, status, fmt.Sprintf("smdp-plus prepare returned %d", status))
 			return
 		}
-		writeJSON(w, http.StatusOK, DownloadOrderResponse{ICCID: out.ICCID})
+		writeJSON(w, http.StatusOK, DownloadOrderResponse{
+			ICCID:          out.ICCID,
+			MatchingID:     out.MatchingID,
+			ActivationCode: out.ActivationCode,
+		})
 		return
 	}
 

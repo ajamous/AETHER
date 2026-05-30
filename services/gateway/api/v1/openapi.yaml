@@ -140,6 +140,12 @@ components:
       properties:
         iccid:
           type: string
+        matching_id:
+          type: string
+          description: SGP.22 §4.1 Matching ID. Populated when the SM-DP+ prepared the profile (order carried a subscriber block).
+        activation_code:
+          type: string
+          description: '`LPA:1$<smdp address>$<matching id>` per SGP.22 §4.1. Populated alongside `matching_id`.'
       required: [iccid]
 
     ConfirmOrderRequest:

@@ -18,8 +18,14 @@ import (
 // Prepared is a profile that has been built and is ready to seal into
 // a BoundProfilePackage for the eUICC that downloads it.
 type Prepared struct {
-	// ICCID is the profile's identifier; the lookup key.
+	// ICCID is the profile's identifier; the primary lookup key.
 	ICCID string
+	// MatchingID is the SGP.22 §4.1 activation-code token an LPA
+	// presents at authenticateClient time (ctxParams1.matchingId).
+	// The SM-DP+ uses it to resolve which prepared profile the eUICC
+	// is downloading. Empty when the profile was prepared without one
+	// (back-compat lab path).
+	MatchingID string
 	// UPP is the DER-encoded SAIP ProfilePackage profile-builder
 	// produced (header + PE-USIM + PE-AKAParameter + PEEnd).
 	UPP []byte
@@ -30,20 +36,30 @@ type Prepared struct {
 type Store interface {
 	Put(p *Prepared) error
 	Get(iccid string) (*Prepared, error)
+	GetByMatchingID(matchingID string) (*Prepared, error)
 }
 
-// ErrNotFound is returned when an ICCID has no prepared profile.
+// ErrNotFound is returned when an ICCID or matchingId has no prepared
+// profile.
 var ErrNotFound = errors.New("profile: not found")
 
 // MemoryStore is the default in-memory prepared-profile store.
+//
+// It maintains a secondary index from matchingId to ICCID so
+// GetByMatchingID is O(1). Both indices are updated under the same
+// lock so a successful Put is fully visible to both lookups.
 type MemoryStore struct {
-	mu  sync.Mutex
-	bag map[string]*Prepared
+	mu           sync.Mutex
+	byICCID      map[string]*Prepared
+	byMatchingID map[string]string // matchingId → iccid
 }
 
 // NewMemoryStore returns an empty MemoryStore.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{bag: make(map[string]*Prepared)}
+	return &MemoryStore{
+		byICCID:      make(map[string]*Prepared),
+		byMatchingID: make(map[string]string),
+	}
 }
 
 func (s *MemoryStore) Put(p *Prepared) error {
@@ -58,15 +74,42 @@ func (s *MemoryStore) Put(p *Prepared) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.bag[p.ICCID] = p
+	// Drop the previous matchingId index entry if this ICCID is being
+	// re-prepared with a different matchingId (or no matchingId).
+	if prev, ok := s.byICCID[p.ICCID]; ok && prev.MatchingID != "" && prev.MatchingID != p.MatchingID {
+		delete(s.byMatchingID, prev.MatchingID)
+	}
+	s.byICCID[p.ICCID] = p
+	if p.MatchingID != "" {
+		s.byMatchingID[p.MatchingID] = p.ICCID
+	}
 	return nil
 }
 
 func (s *MemoryStore) Get(iccid string) (*Prepared, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.bag[iccid]
+	p, ok := s.byICCID[iccid]
 	if !ok {
+		return nil, ErrNotFound
+	}
+	return p, nil
+}
+
+func (s *MemoryStore) GetByMatchingID(matchingID string) (*Prepared, error) {
+	if matchingID == "" {
+		return nil, ErrNotFound
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	iccid, ok := s.byMatchingID[matchingID]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	p, ok := s.byICCID[iccid]
+	if !ok {
+		// Index drift — drop the stale matchingId entry.
+		delete(s.byMatchingID, matchingID)
 		return nil, ErrNotFound
 	}
 	return p, nil

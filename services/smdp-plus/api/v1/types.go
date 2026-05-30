@@ -54,6 +54,13 @@ type AuthenticateClientRequest struct {
 	// Reserved for the spec-faithful outer SEQUENCE; ignored when
 	// the four explicit fields above are populated.
 	AuthenticateServerResponse []byte `json:"authenticate_server_response,omitempty"`
+
+	// MatchingID is the SGP.22 §4.1 activation-code token. In the
+	// fully spec-faithful flow it travels inside ctxParams1; the
+	// in-tree path carries it on the wire so the SM-DP+ can bind
+	// the session to a prepared profile without parsing
+	// ctxParams1 yet.
+	MatchingID string `json:"matching_id,omitempty"`
 }
 
 // AuthenticateClientResponse — SGP.22 §5.6.3.
@@ -92,13 +99,17 @@ type GetBoundProfilePackageRequest struct {
 
 // PrepareProfileRequest is the in-tree stand-in for ES2+
 // DownloadOrder + ConfirmOrder: it asks the SM-DP+ to build a profile
-// from a profile-builder template + subscriber data and hold it,
-// keyed by ICCID, for the eUICC that later downloads it. Served at
-// POST /v1/profiles/prepare (admin surface, not ES9+).
+// from a profile-builder template + subscriber data and hold it for
+// the eUICC that later downloads it. Served at POST /v1/profiles/
+// prepare (admin surface, not ES9+).
 type PrepareProfileRequest struct {
 	// Template is the profile-builder template name. Empty uses the
 	// SM-DP+'s configured default template.
-	Template   string            `json:"template,omitempty"`
+	Template string `json:"template,omitempty"`
+	// MatchingID is the SGP.22 §4.1 activation-code token. Optional;
+	// when empty, the SM-DP+ mints one. A BSS that owns its
+	// activation-code namespace can supply its own.
+	MatchingID string            `json:"matching_id,omitempty"`
 	Subscriber PrepareSubscriber `json:"subscriber"`
 }
 
@@ -112,11 +123,14 @@ type PrepareSubscriber struct {
 	OPc    []byte `json:"opc"`
 }
 
-// PrepareProfileResponse echoes the ICCID the prepared profile is
-// keyed by; the eUICC's later getBoundProfilePackage resolves it.
+// PrepareProfileResponse echoes back the keys the eUICC's later
+// download resolves the prepared profile by, plus the SGP.22 §4.1
+// activation code the BSS hands to the user.
 type PrepareProfileResponse struct {
-	ICCID string `json:"iccid"`
-	Note  string `json:"_note,omitempty"`
+	ICCID          string `json:"iccid"`
+	MatchingID     string `json:"matching_id"`
+	ActivationCode string `json:"activation_code"`
+	Note           string `json:"_note,omitempty"`
 }
 
 // GetBoundProfilePackageResponse — SGP.22 §5.6.4.

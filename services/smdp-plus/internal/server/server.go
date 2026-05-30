@@ -13,6 +13,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -329,6 +330,14 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 	}
 
 	sess.State = session.StateAuthenticated
+	// In the spec-faithful flow matchingId travels inside ctxParams1;
+	// the in-tree request field is the convenience seam until that
+	// parser lands. Binding it here lets buildBPP resolve the
+	// prepared profile by matchingId without the LPA having to know
+	// the ICCID up-front.
+	if req.MatchingID != "" {
+		sess.MatchingID = req.MatchingID
+	}
 	if err := s.sessions.Update(sess); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("update: %v", err))
 		return
@@ -549,13 +558,18 @@ func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk 
 	return bpp.AssembleBoundProfilePackage(iscr, segs)
 }
 
-// uppForSession returns the SAIP UPP to seal into the BPP. It prefers
-// a prepared profile (built by profile-builder, carrying the
-// subscriber's PE-USIM / PE-AKAParameter credentials) resolved by
-// ICCID; the request's ICCID wins, falling back to the session's.
-// When no prepared profile matches, it returns a header-only
-// placeholder so the lab path needs no profile-builder.
+// uppForSession returns the SAIP UPP to seal into the BPP. Resolution
+// order matches SGP.22's intent — the matchingId from the activation
+// code first (set on the session at authenticateClient time), the
+// session's ICCID next, the request's ICCID last (in-tree convenience
+// for tests). When nothing matches, returns a header-only placeholder
+// so the lab path needs no profile-builder.
 func (s *Server) uppForSession(sess *session.Session, iccid string) ([]byte, error) {
+	if sess.MatchingID != "" {
+		if prep, err := s.profiles.GetByMatchingID(sess.MatchingID); err == nil {
+			return prep.UPP, nil
+		}
+	}
 	if iccid == "" {
 		iccid = sess.ICCID
 	}
@@ -627,15 +641,49 @@ func (s *Server) handlePrepareProfile(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadGateway, fmt.Sprintf("profile-builder: %v", err))
 		return
 	}
-	if err := s.profiles.Put(&profile.Prepared{ICCID: req.Subscriber.ICCID, UPP: built.SAIP}); err != nil {
+
+	matchingID := req.MatchingID
+	if matchingID == "" {
+		matchingID, err = newMatchingID()
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("matching id: %v", err))
+			return
+		}
+	}
+	if err := s.profiles.Put(&profile.Prepared{
+		ICCID:      req.Subscriber.ICCID,
+		MatchingID: matchingID,
+		UPP:        built.SAIP,
+	}); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("store prepared profile: %v", err))
 		return
 	}
 
 	writeJSON(w, http.StatusOK, smdpv1.PrepareProfileResponse{
-		ICCID: req.Subscriber.ICCID,
-		Note:  "prepared via template " + template,
+		ICCID:          req.Subscriber.ICCID,
+		MatchingID:     matchingID,
+		ActivationCode: activationCode(s.address, matchingID),
+		Note:           "prepared via template " + template,
 	})
+}
+
+// newMatchingID mints an 8-byte hex token (16 chars) suitable for use
+// as the SGP.22 §4.1 activation-code Matching ID component. Random
+// rather than monotonic so a leaked or guessed value can't be used to
+// enumerate other prepared profiles.
+func newMatchingID() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+// activationCode formats the SGP.22 §4.1 activation code an LPA
+// expects: "LPA:1$<smdp address>$<matching id>". The trailing
+// confirmation-code-required flag is omitted (not yet supported).
+func activationCode(smdpAddress, matchingID string) string {
+	return "LPA:1$" + smdpAddress + "$" + matchingID
 }
 
 // sessionICCIDBytes returns the 10-byte nibble-swapped ICCID for

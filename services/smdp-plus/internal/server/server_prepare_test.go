@@ -263,6 +263,132 @@ func TestPrepareThenBoundProfile_CarriesCredentialsEndToEnd(t *testing.T) {
 	}
 }
 
+// TestPrepareThenBoundProfile_ResolvesByMatchingID drives the
+// activation-code path: prepare returns a matchingId, the LPA carries
+// it on authenticateClient (in-tree stand-in for ctxParams1), and
+// getBoundProfilePackage resolves the prepared profile by matchingId
+// alone — no ICCID on the BPP request. Decrypts the BPP and confirms
+// the operator's credentials still round-trip.
+func TestPrepareThenBoundProfile_ResolvesByMatchingID(t *testing.T) {
+	const (
+		iccid = "8900000000000000008"
+		imsi  = "001010000000008"
+	)
+	ki := bytes.Repeat([]byte{0x55}, 16)
+	opc := bytes.Repeat([]byte{0x66}, 16)
+	wantUPP := credentialUPP(t, imsi, ki, opc)
+
+	pbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/build") {
+			_ = json.NewEncoder(w).Encode(pbclient.BuildResponse{SAIP: wantUPP})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer pbSrv.Close()
+
+	chain := newLabChain(t)
+	hc, brokerClose := fakeBroker(t)
+	defer brokerClose()
+	dpauth, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPauth", "aether.local")
+	dppb, _ := identity.EnsureLabIdentity(context.Background(), hc, "DPpb", "aether.local")
+	roots := x509.NewCertPool()
+	roots.AddCert(chain.rootCert)
+	tm := &identity.TrustMaterial{Roots: roots, Intermediates: x509.NewCertPool()}
+
+	smdpSrv := httptest.NewServer(New(
+		session.NewMemoryStore(time.Minute),
+		Config{
+			HSM: hc, Identity: dpauth, DPpb: dppb, Trust: tm, Address: "aether.local",
+			ProfileBuilder: pbclient.New(pbSrv.URL), DefaultTemplate: "lab-mvno",
+		},
+	).Routes())
+	defer smdpSrv.Close()
+
+	// 1. Prepare: capture the matchingId the SM-DP+ mints.
+	prepBody, _ := json.Marshal(smdpv1.PrepareProfileRequest{
+		Subscriber: smdpv1.PrepareSubscriber{IMSI: imsi, ICCID: iccid, Ki: ki, OPc: opc},
+	})
+	resp, err := http.Post(smdpSrv.URL+"/v1/profiles/prepare", "application/json", bytes.NewReader(prepBody))
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	var prepOut smdpv1.PrepareProfileResponse
+	_ = json.NewDecoder(resp.Body).Decode(&prepOut)
+	resp.Body.Close()
+	if prepOut.MatchingID == "" {
+		t.Fatal("prepare returned empty matching_id")
+	}
+	if !strings.HasPrefix(prepOut.ActivationCode, "LPA:1$aether.local$") {
+		t.Errorf("activation_code = %q, want LPA:1$aether.local$<id>", prepOut.ActivationCode)
+	}
+	if !strings.HasSuffix(prepOut.ActivationCode, prepOut.MatchingID) {
+		t.Errorf("activation_code does not carry matching_id: %q vs %q", prepOut.ActivationCode, prepOut.MatchingID)
+	}
+
+	// 2. initiateAuthentication.
+	initBody, _ := json.Marshal(smdpv1.InitiateAuthenticationRequest{
+		EUICCChallenge: bytes.Repeat([]byte{0xAB}, 16), SMDPAddress: "aether.local",
+	})
+	resp, _ = http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/initiateAuthentication", "application/json", bytes.NewReader(initBody))
+	var initOut smdpv1.InitiateAuthenticationResponse
+	_ = json.NewDecoder(resp.Body).Decode(&initOut)
+	resp.Body.Close()
+	parsed, _ := signing.UnmarshalServerSigned1(initOut.ServerSigned1)
+	tidBytes := parsed.TransactionID
+
+	// 3. authenticateClient — carry the matchingId. In real flow it
+	// lives in ctxParams1; the in-tree path uses the request field.
+	signed, sig, leafDER, eumDER := chain.signAuthenticateResponse(t, tidBytes, "aether.local", parsed.ServerChallenge)
+	authBody, _ := json.Marshal(smdpv1.AuthenticateClientRequest{
+		TransactionID:   hexEncode(tidBytes),
+		EuiccSigned1DER: signed, EuiccSignature1: sig, EuiccCertDER: leafDER, EumCertDER: eumDER,
+		MatchingID: prepOut.MatchingID,
+	})
+	resp, _ = http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/authenticateClient", "application/json", bytes.NewReader(authBody))
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("authenticate status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// 4. getBoundProfilePackage — NO iccid on the request. The
+	// session's matchingId (set above) must resolve the prepared
+	// profile on its own.
+	euiccEphemeral, _ := ecdh.P256().GenerateKey(rand.Reader)
+	bppBody, _ := json.Marshal(smdpv1.GetBoundProfilePackageRequest{
+		TransactionID: hexEncode(tidBytes),
+		EUICCOtpk:     euiccEphemeral.PublicKey().Bytes(),
+	})
+	resp, err = http.Post(smdpSrv.URL+"/gsma/rsp2/es9plus/getBoundProfilePackage", "application/json", bytes.NewReader(bppBody))
+	if err != nil {
+		t.Fatalf("getBPP: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		var prob map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&prob)
+		resp.Body.Close()
+		t.Fatalf("getBPP status = %d, body = %v", resp.StatusCode, prob)
+	}
+	var out smdpv1.GetBoundProfilePackageResponse
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+
+	// 5. Decrypt and confirm the recovered UPP is the prepared one.
+	iscr, segments, err := bpp.DisassembleBoundProfilePackage(out.BoundProfilePackage)
+	if err != nil {
+		t.Fatalf("disassemble: %v", err)
+	}
+	smdpPub, _ := ecdh.P256().NewPublicKey(iscr.SMDPOtpk)
+	keys, _ := bpp.Derive(euiccEphemeral, smdpPub, bpp.SharedInfo(hexEncode(tidBytes)))
+	recovered, err := bpp.OpenSegments(keys, segments)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if !bytes.Equal(recovered, wantUPP) {
+		t.Fatal("recovered UPP differs from the prepared one — matchingId path did not resolve correctly")
+	}
+}
+
 // TestPrepareProfile_RequiresProfileBuilder confirms the endpoint is
 // an honest 501 when no profile-builder is configured (lab default).
 func TestPrepareProfile_RequiresProfileBuilder(t *testing.T) {

@@ -73,7 +73,11 @@ func TestGateway_DownloadOrder_PreparesProfile(t *testing.T) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		json.NewEncoder(w).Encode(smdpPrepareResponse{ICCID: gotPrep.Subscriber.ICCID})
+		json.NewEncoder(w).Encode(smdpPrepareResponse{
+			ICCID:          gotPrep.Subscriber.ICCID,
+			MatchingID:     "mid-abc123",
+			ActivationCode: "LPA:1$smdp.test$mid-abc123",
+		})
 	}))
 	defer smdp.Close()
 
@@ -114,6 +118,12 @@ func TestGateway_DownloadOrder_PreparesProfile(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&out)
 	if out.ICCID != "8900000000000000007" {
 		t.Errorf("response ICCID = %q", out.ICCID)
+	}
+	if out.MatchingID != "mid-abc123" {
+		t.Errorf("matching_id not propagated: %q", out.MatchingID)
+	}
+	if out.ActivationCode != "LPA:1$smdp.test$mid-abc123" {
+		t.Errorf("activation_code not propagated: %q", out.ActivationCode)
 	}
 }
 
