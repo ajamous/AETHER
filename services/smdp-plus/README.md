@@ -12,11 +12,11 @@ exposed by the gateway for upstream BSS.
 | HTTPS server, mTLS-ready                       | Implemented   |
 | ES9+ `initiateAuthentication` (§5.6.1)         | Partial — payload built and signed end to end; eUICC challenge length enforced |
 | ServerSigned1 ASN.1 + ECDSA-SHA-256 signing    | Implemented (§5.7.13 + §H.5) |
-| ES9+ `authenticateClient` (§5.6.2)             | Partial — eUICC chain + signature + replay defense; outer SGP.22 SEQUENCE pending Annex B |
+| ES9+ `authenticateClient` (§5.6.2)             | Implemented — eUICC chain + signature + replay defense; outer SGP.22 SEQUENCE (§5.7.5 AuthenticateServerResponse) accepted; eUICC cert captured onto the session for §5.7.7 verification |
 | EuiccSigned1 verification (§5.7.13)            | Implemented |
-| ES9+ `getBoundProfilePackage` (§5.6.3)         | Implemented when DPpb configured — ECKA → SCP03t → sealed SAIP; honest 501 in lab mode |
+| ES9+ `getBoundProfilePackage` (§5.6.3)         | Implemented when DPpb configured — ECKA → SCP03t → sealed SAIP; matchingId or ICCID resolves the prepared profile; signed PrepareDownloadResponse (§5.7.7) verified against the session's eUICC cert; honest 501 in lab mode |
 | ES9+ `handleNotification` (§5.6.4)             | Skeleton      |
-| Profile preparation (`POST /v1/profiles/prepare`) | Implemented — in-tree stand-in for ES2+ DownloadOrder; builds a UPP via profile-builder, keyed by ICCID |
+| Profile preparation (`POST /v1/profiles/prepare`) | Implemented — in-tree stand-in for ES2+ DownloadOrder; builds a UPP via profile-builder, returns matchingId + SGP.22 §4.1 activation code |
 | In-memory session store                        | Implemented   |
 | Postgres-backed session store                  | Implemented (with TTL eviction) |
 | Redis session store                            | Not started   |

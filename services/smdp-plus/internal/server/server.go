@@ -13,6 +13,7 @@ import (
 	"crypto/ecdh"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -300,15 +301,32 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 	}
 
 	if s.verificationEnabled() {
-		if len(req.EuiccSigned1DER) == 0 || len(req.EuiccSignature1) == 0 ||
-			len(req.EuiccCertDER) == 0 || len(req.EumCertDER) == 0 {
+		// Two intake shapes: a spec-faithful AuthenticateServerResponse
+		// outer SEQUENCE (§5.7.5) or the explicit four-field JSON
+		// envelope. The blob wins when present; the explicit fields
+		// stay as a lab seam for harnesses that don't build the outer
+		// SEQUENCE.
+		euiccSigned1DER := req.EuiccSigned1DER
+		euiccSignature1 := req.EuiccSignature1
+		euiccCertDER := req.EuiccCertDER
+		eumCertDER := req.EumCertDER
+		if len(req.AuthenticateServerResponse) > 0 {
+			s1, sig1, leaf, eum, err := signing.UnmarshalAuthenticateResponseOk(req.AuthenticateServerResponse)
+			if err != nil {
+				writeProblem(w, http.StatusBadRequest, fmt.Sprintf("authenticate_server_response: %v", err))
+				return
+			}
+			euiccSigned1DER, euiccSignature1, euiccCertDER, eumCertDER = s1, sig1, leaf, eum
+		}
+		if len(euiccSigned1DER) == 0 || len(euiccSignature1) == 0 ||
+			len(euiccCertDER) == 0 || len(eumCertDER) == 0 {
 			writeProblem(w, http.StatusBadRequest,
-				"euicc_signed1, euicc_signature1, euicc_certificate, eum_certificate all required")
+				"supply authenticate_server_response or all of euicc_signed1, euicc_signature1, euicc_certificate, eum_certificate")
 			return
 		}
 		res, err := signing.VerifyEuiccAuthenticate(
-			req.EuiccSigned1DER, req.EuiccSignature1,
-			req.EuiccCertDER, req.EumCertDER,
+			euiccSigned1DER, euiccSignature1,
+			euiccCertDER, eumCertDER,
 			signing.VerifyOptions{
 				Roots:         s.trust.Roots,
 				Intermediates: s.trust.Intermediates,
@@ -326,9 +344,29 @@ func (s *Server) handleAuthenticateClient(w http.ResponseWriter, r *http.Request
 				"euiccSigned1.serverChallenge does not match the value issued in initiateAuthentication")
 			return
 		}
+		// Whichever shape arrived, retain the leaf cert bytes the
+		// verifier used so the §5.7.7 PrepareDownloadResponse
+		// verifier in getBoundProfilePackage can reach them.
+		req.EuiccCertDER = euiccCertDER
 	}
 
 	sess.State = session.StateAuthenticated
+	// In the spec-faithful flow matchingId travels inside ctxParams1;
+	// the in-tree request field is the convenience seam until that
+	// parser lands. Binding it here lets buildBPP resolve the
+	// prepared profile by matchingId without the LPA having to know
+	// the ICCID up-front.
+	if req.MatchingID != "" {
+		sess.MatchingID = req.MatchingID
+	}
+	// Stash the eUICC cert for §5.7.7 PrepareDownloadResponse
+	// verification at getBoundProfilePackage time. Only populated
+	// when verification was enabled and succeeded; lab paths that
+	// skip verification leave the field nil and PDR verification is
+	// not available for that session.
+	if s.verificationEnabled() && len(req.EuiccCertDER) > 0 {
+		sess.EUICCCertDER = append([]byte(nil), req.EuiccCertDER...)
+	}
 	if err := s.sessions.Update(sess); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("update: %v", err))
 		return
@@ -450,16 +488,38 @@ func (s *Server) handleGetBoundProfilePackage(w http.ResponseWriter, r *http.Req
 		writeProblem(w, http.StatusNotImplemented, "BPP generation requires --dppb-label; see services/smdp-plus/README.md")
 		return
 	}
-	if len(req.EUICCOtpk) == 0 {
-		writeProblem(w, http.StatusBadRequest, "euicc_otpk required (uncompressed P-256 point, 65 bytes)")
+
+	// Two paths to the eUICC otPK:
+	//   - signed PrepareDownloadResponse (§5.7.7): parse + verify
+	//     against the cert captured at authenticateClient time;
+	//     extract the otPK from EuiccSigned2.
+	//   - raw EUICCOtpk on the request: the in-tree convenience
+	//     path used by harnesses and lab flows without a session
+	//     cert; left in place so existing tests stay green.
+	euiccOtpk := req.EUICCOtpk
+	if len(req.PrepareDownloadResponse) > 0 {
+		txidBytes, err := hexDecode(sess.TransactionID)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("tid decode: %v", err))
+			return
+		}
+		verified, err := signing.VerifyPrepareDownloadResponse(req.PrepareDownloadResponse, sess.EUICCCertDER, txidBytes)
+		if err != nil {
+			writeProblem(w, http.StatusUnauthorized, fmt.Sprintf("PrepareDownloadResponse verification failed: %v", err))
+			return
+		}
+		euiccOtpk = verified.EuiccOtpk
+	}
+	if len(euiccOtpk) == 0 {
+		writeProblem(w, http.StatusBadRequest, "supply either prepare_download_response or euicc_otpk")
 		return
 	}
-	if len(req.EUICCOtpk) != 65 || req.EUICCOtpk[0] != 0x04 {
+	if len(euiccOtpk) != 65 || euiccOtpk[0] != 0x04 {
 		writeProblem(w, http.StatusBadRequest, "euicc_otpk must be uncompressed P-256 point (0x04 || X(32) || Y(32))")
 		return
 	}
 
-	der, err := s.buildBPP(r.Context(), sess, req.EUICCOtpk, req.ICCID)
+	der, err := s.buildBPP(r.Context(), sess, euiccOtpk, req.ICCID)
 	if err != nil {
 		slog.Default().Error("BPP assembly failed", slog.String("err", err.Error()))
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("BPP assembly: %v", err))
@@ -549,13 +609,18 @@ func (s *Server) buildBPP(ctx context.Context, sess *session.Session, euiccOtpk 
 	return bpp.AssembleBoundProfilePackage(iscr, segs)
 }
 
-// uppForSession returns the SAIP UPP to seal into the BPP. It prefers
-// a prepared profile (built by profile-builder, carrying the
-// subscriber's PE-USIM / PE-AKAParameter credentials) resolved by
-// ICCID; the request's ICCID wins, falling back to the session's.
-// When no prepared profile matches, it returns a header-only
-// placeholder so the lab path needs no profile-builder.
+// uppForSession returns the SAIP UPP to seal into the BPP. Resolution
+// order matches SGP.22's intent — the matchingId from the activation
+// code first (set on the session at authenticateClient time), the
+// session's ICCID next, the request's ICCID last (in-tree convenience
+// for tests). When nothing matches, returns a header-only placeholder
+// so the lab path needs no profile-builder.
 func (s *Server) uppForSession(sess *session.Session, iccid string) ([]byte, error) {
+	if sess.MatchingID != "" {
+		if prep, err := s.profiles.GetByMatchingID(sess.MatchingID); err == nil {
+			return prep.UPP, nil
+		}
+	}
 	if iccid == "" {
 		iccid = sess.ICCID
 	}
@@ -627,15 +692,49 @@ func (s *Server) handlePrepareProfile(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, http.StatusBadGateway, fmt.Sprintf("profile-builder: %v", err))
 		return
 	}
-	if err := s.profiles.Put(&profile.Prepared{ICCID: req.Subscriber.ICCID, UPP: built.SAIP}); err != nil {
+
+	matchingID := req.MatchingID
+	if matchingID == "" {
+		matchingID, err = newMatchingID()
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("matching id: %v", err))
+			return
+		}
+	}
+	if err := s.profiles.Put(&profile.Prepared{
+		ICCID:      req.Subscriber.ICCID,
+		MatchingID: matchingID,
+		UPP:        built.SAIP,
+	}); err != nil {
 		writeProblem(w, http.StatusInternalServerError, fmt.Sprintf("store prepared profile: %v", err))
 		return
 	}
 
 	writeJSON(w, http.StatusOK, smdpv1.PrepareProfileResponse{
-		ICCID: req.Subscriber.ICCID,
-		Note:  "prepared via template " + template,
+		ICCID:          req.Subscriber.ICCID,
+		MatchingID:     matchingID,
+		ActivationCode: activationCode(s.address, matchingID),
+		Note:           "prepared via template " + template,
 	})
+}
+
+// newMatchingID mints an 8-byte hex token (16 chars) suitable for use
+// as the SGP.22 §4.1 activation-code Matching ID component. Random
+// rather than monotonic so a leaked or guessed value can't be used to
+// enumerate other prepared profiles.
+func newMatchingID() (string, error) {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+// activationCode formats the SGP.22 §4.1 activation code an LPA
+// expects: "LPA:1$<smdp address>$<matching id>". The trailing
+// confirmation-code-required flag is omitted (not yet supported).
+func activationCode(smdpAddress, matchingID string) string {
+	return "LPA:1$" + smdpAddress + "$" + matchingID
 }
 
 // sessionICCIDBytes returns the 10-byte nibble-swapped ICCID for
