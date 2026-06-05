@@ -55,57 +55,63 @@ func TestMemory_GenerateAndSignECDSA(t *testing.T) {
 }
 
 func TestMemory_DeriveKey_ECKA(t *testing.T) {
-	b := New()
-	ctx := context.Background()
+	// Both curves SGP.22 §2.6.1 mandates must agree end to end through
+	// the broker: P-256 on crypto/ecdh, Brainpool P-256 r1 on
+	// pkg/crypto/brainpool.
+	for _, curve := range []hsmv1.Curve{hsmv1.CurveP256, hsmv1.CurveBrainpoolP256r1} {
+		t.Run(string(curve), func(t *testing.T) {
+			b := New()
+			ctx := context.Background()
 
-	a, err := b.GenerateKeyPair(ctx, &hsmv1.GenerateKeyPairRequest{
-		Label: "A",
-		Kind:  hsmv1.KeyKindECKA,
-		Curve: hsmv1.CurveP256,
-	})
-	if err != nil {
-		t.Fatalf("gen A: %v", err)
-	}
-	bb, err := b.GenerateKeyPair(ctx, &hsmv1.GenerateKeyPairRequest{
-		Label: "B",
-		Kind:  hsmv1.KeyKindECKA,
-		Curve: hsmv1.CurveP256,
-	})
-	if err != nil {
-		t.Fatalf("gen B: %v", err)
-	}
+			a, err := b.GenerateKeyPair(ctx, &hsmv1.GenerateKeyPairRequest{
+				Label: "A", Kind: hsmv1.KeyKindECKA, Curve: curve,
+			})
+			if err != nil {
+				t.Fatalf("gen A: %v", err)
+			}
+			bb, err := b.GenerateKeyPair(ctx, &hsmv1.GenerateKeyPairRequest{
+				Label: "B", Kind: hsmv1.KeyKindECKA, Curve: curve,
+			})
+			if err != nil {
+				t.Fatalf("gen B: %v", err)
+			}
 
-	info := []byte("aether-derive-test")
-	derived, err := b.DeriveKey(ctx, &hsmv1.DeriveKeyRequest{
-		KeyID:      a.Handle.ID,
-		PeerPublic: bb.PublicKey,
-		SharedInfo: info,
-		KeyLen:     32,
-	})
-	if err != nil {
-		t.Fatalf("derive: %v", err)
-	}
-	bytesA, err := b.SessionBytes(derived.SessionKeyID)
-	if err != nil {
-		t.Fatalf("session bytes A: %v", err)
-	}
+			info := []byte("aether-derive-test")
+			derived, err := b.DeriveKey(ctx, &hsmv1.DeriveKeyRequest{
+				KeyID:      a.Handle.ID,
+				PeerPublic: bb.PublicKey,
+				SharedInfo: info,
+				KeyLen:     32,
+			})
+			if err != nil {
+				t.Fatalf("derive: %v", err)
+			}
+			bytesA, err := b.SessionBytes(derived.SessionKeyID)
+			if err != nil {
+				t.Fatalf("session bytes A: %v", err)
+			}
 
-	derived2, err := b.DeriveKey(ctx, &hsmv1.DeriveKeyRequest{
-		KeyID:      bb.Handle.ID,
-		PeerPublic: a.PublicKey,
-		SharedInfo: info,
-		KeyLen:     32,
-	})
-	if err != nil {
-		t.Fatalf("derive2: %v", err)
-	}
-	bytesB, err := b.SessionBytes(derived2.SessionKeyID)
-	if err != nil {
-		t.Fatalf("session bytes B: %v", err)
-	}
+			derived2, err := b.DeriveKey(ctx, &hsmv1.DeriveKeyRequest{
+				KeyID:      bb.Handle.ID,
+				PeerPublic: a.PublicKey,
+				SharedInfo: info,
+				KeyLen:     32,
+			})
+			if err != nil {
+				t.Fatalf("derive2: %v", err)
+			}
+			bytesB, err := b.SessionBytes(derived2.SessionKeyID)
+			if err != nil {
+				t.Fatalf("session bytes B: %v", err)
+			}
 
-	if string(bytesA) != string(bytesB) {
-		t.Fatalf("derived keys differ:\n  A=%x\n  B=%x", bytesA, bytesB)
+			if string(bytesA) != string(bytesB) {
+				t.Fatalf("derived keys differ:\n  A=%x\n  B=%x", bytesA, bytesB)
+			}
+			if len(bytesA) != 32 {
+				t.Fatalf("derived %d bytes, want 32", len(bytesA))
+			}
+		})
 	}
 }
 

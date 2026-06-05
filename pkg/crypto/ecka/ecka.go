@@ -19,8 +19,12 @@ import (
 	"github.com/ajamous/aether/pkg/crypto/kdf"
 )
 
-// Curve names a curve. P-256 is supported out of the box. Brainpool
-// P-256 r1 returns ErrBrainpoolNotImplemented.
+// Curve names a curve SGP.22 §2.6.1 mandates. Both are supported by the
+// curve-agnostic API (Generate / PrivateKey.DeriveBytes). The legacy
+// crypto/ecdh-native API on this file (GenerateKeyPair / Derive /
+// KeyPair) is P-256 only; it returns ErrBrainpoolNotImplemented for
+// Brainpool because crypto/ecdh cannot represent a custom curve. New
+// callers that need either curve should use Generate.
 type Curve int
 
 const (
@@ -28,7 +32,10 @@ const (
 	CurveBrainpoolP256r1
 )
 
-var ErrBrainpoolNotImplemented = errors.New("ecka: brainpool P-256 r1 not yet implemented")
+// ErrBrainpoolNotImplemented is returned by the legacy crypto/ecdh-based
+// KeyPair API for Brainpool keys. The curve-agnostic Generate /
+// PrivateKey API supports Brainpool P-256 r1; prefer it.
+var ErrBrainpoolNotImplemented = errors.New("ecka: brainpool P-256 r1 not supported by the crypto/ecdh KeyPair API; use Generate")
 
 // KeyPair holds an ECKA key pair on a SGP.22-supported curve.
 type KeyPair struct {
