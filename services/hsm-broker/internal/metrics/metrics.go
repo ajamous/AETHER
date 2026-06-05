@@ -59,7 +59,6 @@ func (h *LatencyHistogram) Observe(d time.Duration) {
 	}
 	h.count.Add(1)
 	h.sumNs.Add(uint64(d.Nanoseconds())) //nolint:gosec // observed durations from request timing are positive
-
 }
 
 // Time is a convenience that times f and observes its duration.

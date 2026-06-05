@@ -2,7 +2,6 @@ package ecdsa
 
 import (
 	"crypto/rand"
-	"errors"
 	"testing"
 )
 
@@ -69,10 +68,24 @@ func TestVerifyP256_RejectsTrailingBytes(t *testing.T) {
 	}
 }
 
-func TestBrainpoolP256r1_NotYetImplemented(t *testing.T) {
-	_, err := GenerateKey(CurveBrainpoolP256r1, rand.Reader)
-	if !errors.Is(err, ErrBrainpoolNotImplemented) {
-		t.Fatalf("expected ErrBrainpoolNotImplemented, got %v", err)
+func TestSignVerifyBrainpoolP256r1_RoundTrip(t *testing.T) {
+	priv, err := GenerateKey(CurveBrainpoolP256r1, rand.Reader)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if got := priv.Params().Name; got != "brainpoolP256r1" {
+		t.Fatalf("unexpected curve %q", got)
+	}
+	msg := []byte("aether SGP.22 brainpool message")
+	sig, err := SignSHA256(priv, msg)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	if err := VerifySHA256(&priv.PublicKey, msg, sig); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if err := VerifySHA256(&priv.PublicKey, []byte("other"), sig); err == nil {
+		t.Fatal("expected verification failure on a different message")
 	}
 }
 

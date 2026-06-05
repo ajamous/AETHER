@@ -14,7 +14,6 @@ package memory
 
 import (
 	"context"
-	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
@@ -27,13 +26,12 @@ import (
 
 	cryptoecdsa "github.com/ajamous/aether/pkg/crypto/ecdsa"
 	cryptoecka "github.com/ajamous/aether/pkg/crypto/ecka"
-	cryptokdf "github.com/ajamous/aether/pkg/crypto/kdf"
 )
 
 type entry struct {
 	handle hsmv1.KeyHandle
 	ecdsa  *ecdsa.PrivateKey
-	ecka   *ecdh.PrivateKey
+	ecka   *cryptoecka.PrivateKey
 	// session keys derived via DeriveKey: raw bytes kept HSM-side only
 	sessionBytes []byte
 }
@@ -100,12 +98,12 @@ func (b *Backend) GenerateKeyPair(_ context.Context, req *hsmv1.GenerateKeyPairR
 		if err != nil {
 			return nil, err
 		}
-		kp, err := cryptoecka.GenerateKeyPair(ec)
+		kp, err := cryptoecka.Generate(ec)
 		if err != nil {
 			return nil, fmt.Errorf("memory: generate ECKA: %w", err)
 		}
-		e.ecka = kp.Priv
-		pub = kp.Pub.Bytes()
+		e.ecka = kp
+		pub = kp.PublicBytes()
 	case hsmv1.KeyKindUnspecified:
 		return nil, fmt.Errorf("%w: key kind not specified", broker.ErrUnsupportedKind)
 	default:
@@ -163,18 +161,9 @@ func (b *Backend) DeriveKey(_ context.Context, req *hsmv1.DeriveKeyRequest) (*hs
 	if !ok || local.ecka == nil {
 		return nil, broker.ErrKeyNotFound
 	}
-	peerCurve := local.ecka.Curve()
-	peer, err := peerCurve.NewPublicKey(req.PeerPublic)
+	derived, err := local.ecka.DeriveBytes(req.PeerPublic, req.SharedInfo, int(req.KeyLen))
 	if err != nil {
-		return nil, fmt.Errorf("memory: peer pubkey: %w", err)
-	}
-	z, err := local.ecka.ECDH(peer)
-	if err != nil {
-		return nil, fmt.Errorf("memory: ECDH: %w", err)
-	}
-	derived, err := cryptokdf.X963SHA256(z, req.SharedInfo, int(req.KeyLen))
-	if err != nil {
-		return nil, fmt.Errorf("memory: KDF: %w", err)
+		return nil, fmt.Errorf("memory: derive: %w", err)
 	}
 	id := newID()
 	b.mu.Lock()

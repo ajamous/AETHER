@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+`pkg/crypto/brainpool` — Brainpool P-256 r1 curve, closing the
+SGP.22 §2.6.1 dual-curve mandate (ECDSA + ECKA) that had been stubbed
+since bootstrap:
+- The standard library cannot represent this curve:
+  `crypto/elliptic.CurveParams` hardcodes the coefficient `a = -3`
+  (true for every NIST prime curve, false for the Brainpool family),
+  so a CurveParams built from RFC 5639 §3.4 parameters reports its
+  own base point as off-curve and panics inside `ScalarMult`. The new
+  package supplies its own short-Weierstrass affine arithmetic with a
+  general `a`, exposed through the `elliptic.Curve` interface so
+  `crypto/ecdsa`'s generic path drives it unchanged.
+- Validated against the **official RFC 7027 §A.1 ECDH known-answer
+  vector** (both parties derive the published shared X), plus
+  base-point-on-curve, `N·G = ∞`, addition commutativity/identity/
+  inverse, and an ECDSA sign→verify→reject round trip.
+- `pkg/crypto/ecdsa` now signs and verifies on `CurveBrainpoolP256r1`
+  instead of returning `ErrBrainpoolNotImplemented` (error removed; no
+  external callers).
+- `pkg/crypto/ecka` gains a curve-agnostic agreement API —
+  `ecka.Generate(curve)` returning a `*PrivateKey` with
+  `PublicBytes()` (uncompressed X9.63) and `DeriveBytes(peerPublic,
+  sharedInfo, keyLen)` — supporting **both** P-256 and Brainpool
+  P-256 r1. P-256 stays on constant-time `crypto/ecdh`; Brainpool runs
+  the ECDH over `pkg/crypto/brainpool`. Peer public keys are validated
+  on-curve and rejected if at infinity (brainpoolP256r1 has cofactor 1,
+  so that is a complete subgroup check). The legacy crypto/ecdh-native
+  `KeyPair`/`Derive` API is unchanged and remains P-256 only, keeping
+  the consumer BPP session-key path (services/smdp-plus) on the
+  hardened implementation.
+- `services/hsm-broker` memory backend now derives ECKA session keys
+  on either curve through the new API; a table-driven DeriveKey test
+  proves both parties agree on P-256 and on Brainpool.
+- Security note carried in the package docs: the portable `math/big`
+  Brainpool arithmetic is **not constant-time**, so production
+  Brainpool *signing* belongs in an HSM via `services/hsm-broker`;
+  the in-tree curve is for verification, key agreement, and
+  lab/ephemeral signing.
+
 SGP.22 spec-faithfulness follow-ups — matchingId, signed PDR, outer SEQUENCE:
 - **matchingId resolution (§4.1).** The prepared profile was
   resolved only by ICCID. Real SGP.22 derives a matchingId from the

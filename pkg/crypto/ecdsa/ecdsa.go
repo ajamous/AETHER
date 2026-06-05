@@ -3,9 +3,11 @@
 //
 // SGP.22 §2.6.1 requires support for both NIST P-256 and Brainpool
 // P-256 r1 in any compliant implementation. P-256 is provided by the
-// Go standard library. Brainpool P-256 r1 is not, and is exposed here
-// as ErrBrainpoolNotImplemented until a dependency-vetted curve
-// implementation is added in a follow-up.
+// Go standard library; Brainpool P-256 r1 comes from
+// pkg/crypto/brainpool, which supplies the curve arithmetic the
+// standard library omits. See that package's security note: its
+// math/big arithmetic is not constant-time, so production Brainpool
+// signing belongs in an HSM via services/hsm-broker.
 package ecdsa
 
 import (
@@ -18,6 +20,8 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+
+	"github.com/ajamous/aether/pkg/crypto/brainpool"
 )
 
 // Curve names the curves SGP.22 §2.6.1 mandates support for.
@@ -26,16 +30,10 @@ type Curve int
 const (
 	// CurveP256 is NIST P-256, also known as secp256r1 / prime256v1.
 	CurveP256 Curve = iota
-	// CurveBrainpoolP256r1 is the Brainpool P-256 r1 curve. SGP.22
-	// requires support; this package returns ErrBrainpoolNotImplemented
-	// until a curve provider is wired in.
+	// CurveBrainpoolP256r1 is the Brainpool P-256 r1 curve, mandated by
+	// SGP.22 §2.6.1 and provided via pkg/crypto/brainpool.
 	CurveBrainpoolP256r1
 )
-
-// ErrBrainpoolNotImplemented is returned when a caller asks for
-// Brainpool P-256 r1. Tracking issue: vendor a vetted Brainpool
-// implementation and remove this error.
-var ErrBrainpoolNotImplemented = errors.New("ecdsa: brainpool P-256 r1 not yet implemented")
 
 // SignatureDER is an ECDSA signature in the DER-encoded SEQUENCE { r, s }
 // form. SGP.22 §H.5 carries signatures over ASN.1, so DER is the
@@ -110,7 +108,7 @@ func goCurve(c Curve) (elliptic.Curve, error) {
 	case CurveP256:
 		return elliptic.P256(), nil
 	case CurveBrainpoolP256r1:
-		return nil, ErrBrainpoolNotImplemented
+		return brainpool.P256r1(), nil
 	default:
 		return nil, fmt.Errorf("ecdsa: unknown curve %d", c)
 	}
