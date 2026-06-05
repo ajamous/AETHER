@@ -3,6 +3,8 @@ package ecka
 import (
 	"bytes"
 	"testing"
+
+	"github.com/ajamous/aether/pkg/crypto/brainpool"
 )
 
 // agreementRoundTrip checks the defining ECKA property: two parties
@@ -82,7 +84,7 @@ func TestBrainpoolKeyIsOnCurve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
-	if !k.bp.curve.IsOnCurve(k.bp.x, k.bp.y) {
+	if !brainpool.IsOnCurve(k.bp.x, k.bp.y) {
 		t.Fatal("generated Brainpool public key is not on the curve")
 	}
 	if k.Curve() != CurveBrainpoolP256r1 {

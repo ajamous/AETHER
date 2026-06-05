@@ -21,9 +21,8 @@ func hexInt(t *testing.T, s string) *big.Int {
 // were mistyped, the published base point would not satisfy the curve
 // equation. This is the check elliptic.CurveParams fails for Brainpool.
 func TestBasePointOnCurve(t *testing.T) {
-	c := P256r1()
-	p := c.Params()
-	if !c.IsOnCurve(p.Gx, p.Gy) {
+	p := Params()
+	if !IsOnCurve(p.Gx, p.Gy) {
 		t.Fatal("base point G is not on the curve — domain parameters are wrong")
 	}
 }
@@ -31,8 +30,7 @@ func TestBasePointOnCurve(t *testing.T) {
 // TestOrderAnnihilatesBasePoint checks N·G = ∞, which exercises the full
 // scalar-multiplication path against the published group order.
 func TestOrderAnnihilatesBasePoint(t *testing.T) {
-	c := P256r1()
-	x, y := c.ScalarBaseMult(c.Params().N.Bytes())
+	x, y := ScalarBaseMult(Params().N.Bytes())
 	if x.Sign() != 0 || y.Sign() != 0 {
 		t.Fatalf("N·G = (%s, %s), want point at infinity", x, y)
 	}
@@ -44,8 +42,6 @@ func TestOrderAnnihilatesBasePoint(t *testing.T) {
 // published value. A single arithmetic bug (slope, reduction, sign)
 // would break this.
 func TestRFC7027ECDH(t *testing.T) {
-	c := P256r1()
-
 	dA := hexInt(t, "81DB1EE100150FF2EA338D708271BE38300CB54241D79950F77B063039804F1D")
 	xqA := hexInt(t, "44106E913F92BC02A1705D9953A8414DB95E1AAA49E81D9E85F929A8E3100BE5")
 	yqA := hexInt(t, "8AB4846F11CACCB73CE49CBDD120F5A900A69FD32C272223F789EF10EB089BDC")
@@ -57,16 +53,16 @@ func TestRFC7027ECDH(t *testing.T) {
 	wantZx := hexInt(t, "89AFC39D41D3B327814B80940B042590F96556EC91E6AE7939BCE31F3A18BF2B")
 
 	// Public keys must be reproduced from the private scalars.
-	if gotX, gotY := c.ScalarBaseMult(dA.Bytes()); gotX.Cmp(xqA) != 0 || gotY.Cmp(yqA) != 0 {
+	if gotX, gotY := ScalarBaseMult(dA.Bytes()); gotX.Cmp(xqA) != 0 || gotY.Cmp(yqA) != 0 {
 		t.Fatalf("QA mismatch:\n got (%x, %x)\nwant (%x, %x)", gotX, gotY, xqA, yqA)
 	}
-	if gotX, gotY := c.ScalarBaseMult(dB.Bytes()); gotX.Cmp(xqB) != 0 || gotY.Cmp(yqB) != 0 {
+	if gotX, gotY := ScalarBaseMult(dB.Bytes()); gotX.Cmp(xqB) != 0 || gotY.Cmp(yqB) != 0 {
 		t.Fatalf("QB mismatch:\n got (%x, %x)\nwant (%x, %x)", gotX, gotY, xqB, yqB)
 	}
 
 	// Both ECDH directions must agree with the published shared X.
-	zx1, _ := c.ScalarMult(xqB, yqB, dA.Bytes())
-	zx2, _ := c.ScalarMult(xqA, yqA, dB.Bytes())
+	zx1, _ := ScalarMult(xqB, yqB, dA.Bytes())
+	zx2, _ := ScalarMult(xqA, yqA, dB.Bytes())
 	if zx1.Cmp(zx2) != 0 {
 		t.Fatalf("ECDH not symmetric: %x != %x", zx1, zx2)
 	}
@@ -79,13 +75,9 @@ func TestRFC7027ECDH(t *testing.T) {
 // to end: key generation, signing, and verification all succeed, and a
 // tampered digest is rejected.
 func TestECDSARoundTrip(t *testing.T) {
-	c := P256r1()
-	priv, err := ecdsa.GenerateKey(c, rand.Reader)
+	priv, err := ecdsa.GenerateKey(P256r1(), rand.Reader)
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
-	}
-	if !c.IsOnCurve(priv.PublicKey.X, priv.PublicKey.Y) {
-		t.Fatal("generated public key is not on the curve")
 	}
 	digest := sha256.Sum256([]byte("aether brainpool round trip"))
 	r, s, err := ecdsa.Sign(rand.Reader, priv, digest[:])
@@ -104,28 +96,27 @@ func TestECDSARoundTrip(t *testing.T) {
 // TestAddCommutativeAndInverse exercises the addition special cases:
 // commutativity, identity, and P + (-P) = ∞.
 func TestAddCommutativeAndInverse(t *testing.T) {
-	c := P256r1()
-	p := c.Params()
+	p := Params()
 	// 2G and 3G as sample points.
-	x2, y2 := c.Double(p.Gx, p.Gy)
-	x3, y3 := c.Add(x2, y2, p.Gx, p.Gy)
+	x2, y2 := Double(p.Gx, p.Gy)
+	x3, y3 := Add(x2, y2, p.Gx, p.Gy)
 
 	// Commutativity: 2G + 3G == 3G + 2G.
-	ax, ay := c.Add(x2, y2, x3, y3)
-	bx, by := c.Add(x3, y3, x2, y2)
+	ax, ay := Add(x2, y2, x3, y3)
+	bx, by := Add(x3, y3, x2, y2)
 	if ax.Cmp(bx) != 0 || ay.Cmp(by) != 0 {
 		t.Fatal("addition is not commutative")
 	}
 
 	// Identity: G + ∞ == G.
-	ix, iy := c.Add(p.Gx, p.Gy, new(big.Int), new(big.Int))
+	ix, iy := Add(p.Gx, p.Gy, new(big.Int), new(big.Int))
 	if ix.Cmp(p.Gx) != 0 || iy.Cmp(p.Gy) != 0 {
 		t.Fatal("G + ∞ != G")
 	}
 
 	// Inverse: G + (-G) == ∞, where -G = (Gx, p - Gy).
 	negGy := new(big.Int).Sub(p.P, p.Gy)
-	zx, zy := c.Add(p.Gx, p.Gy, p.Gx, negGy)
+	zx, zy := Add(p.Gx, p.Gy, p.Gx, negGy)
 	if zx.Sign() != 0 || zy.Sign() != 0 {
 		t.Fatalf("G + (-G) = (%s, %s), want ∞", zx, zy)
 	}

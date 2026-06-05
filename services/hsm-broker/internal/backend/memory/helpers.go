@@ -40,15 +40,24 @@ func mapECKACurve(c hsmv1.Curve) (cryptoecka.Curve, error) {
 	}
 }
 
-// ecdsaPubBytes returns the uncompressed X9.63 point encoding of pub
-// (SEC1 §2.3.3: `0x04 || X || Y`, with X and Y left-padded to the
-// curve's byte length).
+// ecdsaPubBytes returns the uncompressed X9.63 point encoding of the
+// public key (SEC1 §2.3.3: `0x04 || X || Y`, with X and Y left-padded
+// to the curve's byte length).
 func ecdsaPubBytes(priv *ecdsa.PrivateKey) []byte {
+	// Standard curves: the non-deprecated PublicKey.Bytes() returns the
+	// uncompressed SEC1 point directly.
+	if b, err := priv.PublicKey.Bytes(); err == nil {
+		return b
+	}
+	// Custom curves (Brainpool P-256 r1) are rejected by
+	// PublicKey.Bytes, and crypto/ecdh — the deprecation's suggested
+	// replacement — supports NIST curves only. Reading the affine
+	// coordinates is the only encoding path that exists for them.
 	byteLen := (priv.Curve.Params().BitSize + 7) / 8
 	out := make([]byte, 1+2*byteLen)
 	out[0] = 0x04
-	priv.PublicKey.X.FillBytes(out[1 : 1+byteLen])
-	priv.PublicKey.Y.FillBytes(out[1+byteLen:])
+	priv.PublicKey.X.FillBytes(out[1 : 1+byteLen]) //nolint:staticcheck // SA1019: no non-deprecated encoding exists for a custom-curve ecdsa.PublicKey
+	priv.PublicKey.Y.FillBytes(out[1+byteLen:])    //nolint:staticcheck // SA1019: see above
 	return out
 }
 

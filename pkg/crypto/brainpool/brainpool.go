@@ -52,8 +52,11 @@ var (
 	p256r1     *curve
 )
 
-// P256r1 returns the Brainpool P-256 r1 curve (RFC 5639 §3.4).
-func P256r1() elliptic.Curve {
+// impl returns the concrete curve singleton. Calling arithmetic through
+// this (rather than the elliptic.Curve interface) keeps callers off the
+// crypto/elliptic methods that Go 1.21 deprecated — a deprecation whose
+// suggested replacement (crypto/ecdh) cannot represent this curve.
+func impl() *curve {
 	p256r1Once.Do(func() {
 		p256r1 = &curve{
 			a: mustHex("7D5A0975FC2C3057EEF67530417AFFE7FB8055C126DC5C6CE94A4B44F330B5D9"),
@@ -70,6 +73,30 @@ func P256r1() elliptic.Curve {
 	})
 	return p256r1
 }
+
+// P256r1 returns the Brainpool P-256 r1 curve (RFC 5639 §3.4) as an
+// elliptic.Curve, for handing to crypto/ecdsa. For direct arithmetic,
+// prefer the package-level functions below, which avoid the deprecated
+// interface methods.
+func P256r1() elliptic.Curve { return impl() }
+
+// Params returns the curve domain parameters (P, N, B, Gx, Gy, BitSize).
+func Params() *elliptic.CurveParams { return impl().params }
+
+// IsOnCurve reports whether (x, y) satisfies y² = x³ + a·x + b (mod p).
+func IsOnCurve(x, y *big.Int) bool { return impl().IsOnCurve(x, y) }
+
+// Add returns the sum of the two affine points.
+func Add(x1, y1, x2, y2 *big.Int) (*big.Int, *big.Int) { return impl().Add(x1, y1, x2, y2) }
+
+// Double returns 2·(x1, y1).
+func Double(x1, y1 *big.Int) (*big.Int, *big.Int) { return impl().Double(x1, y1) }
+
+// ScalarMult returns k·(x, y), with k a big-endian scalar.
+func ScalarMult(x, y *big.Int, k []byte) (*big.Int, *big.Int) { return impl().ScalarMult(x, y, k) }
+
+// ScalarBaseMult returns k·G where G is the curve's base point.
+func ScalarBaseMult(k []byte) (*big.Int, *big.Int) { return impl().ScalarBaseMult(k) }
 
 func mustHex(s string) *big.Int {
 	n, ok := new(big.Int).SetString(s, 16)
@@ -168,17 +195,17 @@ func (c *curve) fromLambda(lambda, x1, y1, x2 *big.Int) (*big.Int, *big.Int) {
 	return x3, y3
 }
 
-// ScalarMult returns k·(Bx, By) via left-to-right double-and-add.
+// ScalarMult returns k·(bx, by) via left-to-right double-and-add.
 //
 // Not constant-time: the conditional add is data-dependent. See the
 // package security note.
-func (c *curve) ScalarMult(Bx, By *big.Int, k []byte) (*big.Int, *big.Int) {
+func (c *curve) ScalarMult(bx, by *big.Int, k []byte) (*big.Int, *big.Int) {
 	x, y := new(big.Int), new(big.Int) // infinity
 	for _, b := range k {
 		for bit := 0; bit < 8; bit++ {
 			x, y = c.Double(x, y)
 			if b&0x80 != 0 {
-				x, y = c.Add(x, y, Bx, By)
+				x, y = c.Add(x, y, bx, by)
 			}
 			b <<= 1
 		}

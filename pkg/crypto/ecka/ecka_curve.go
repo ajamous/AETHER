@@ -2,11 +2,9 @@ package ecka
 
 import (
 	"crypto/ecdh"
-	"crypto/elliptic"
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 
 	"github.com/ajamous/aether/pkg/crypto/brainpool"
@@ -33,10 +31,12 @@ type PrivateKey struct {
 }
 
 type bpPrivate struct {
-	curve elliptic.Curve
-	d     *big.Int
-	x, y  *big.Int
+	d    *big.Int
+	x, y *big.Int
 }
+
+// brainpoolByteLen is the coordinate width of brainpoolP256r1.
+const brainpoolByteLen = 32
 
 // Generate produces a fresh ECKA private key on the requested curve.
 func Generate(c Curve) (*PrivateKey, error) {
@@ -48,13 +48,12 @@ func Generate(c Curve) (*PrivateKey, error) {
 		}
 		return &PrivateKey{curve: c, p256: k}, nil
 	case CurveBrainpoolP256r1:
-		bc := brainpool.P256r1()
-		d, err := randScalar(bc.Params().N, rand.Reader)
+		d, err := randScalar(brainpool.Params().N)
 		if err != nil {
 			return nil, fmt.Errorf("ecka: generate Brainpool: %w", err)
 		}
-		x, y := bc.ScalarBaseMult(d.Bytes())
-		return &PrivateKey{curve: c, bp: &bpPrivate{curve: bc, d: d, x: x, y: y}}, nil
+		x, y := brainpool.ScalarBaseMult(d.Bytes())
+		return &PrivateKey{curve: c, bp: &bpPrivate{d: d, x: x, y: y}}, nil
 	default:
 		return nil, fmt.Errorf("ecka: unknown curve %d", c)
 	}
@@ -71,7 +70,7 @@ func (k *PrivateKey) PublicBytes() []byte {
 	case CurveP256:
 		return k.p256.PublicKey().Bytes()
 	case CurveBrainpoolP256r1:
-		return marshalUncompressed(k.bp.curve, k.bp.x, k.bp.y)
+		return marshalUncompressed(k.bp.x, k.bp.y)
 	default:
 		return nil
 	}
@@ -97,16 +96,18 @@ func (k *PrivateKey) DeriveBytes(peerPublic, sharedInfo []byte, keyLen int) ([]b
 		}
 		return kdf.X963SHA256(z, sharedInfo, keyLen)
 	case CurveBrainpoolP256r1:
-		px, py, err := unmarshalUncompressed(k.bp.curve, peerPublic)
+		px, py, err := parseUncompressed(peerPublic)
 		if err != nil {
 			return nil, err
 		}
-		zx, zy := k.bp.curve.ScalarMult(px, py, k.bp.d.Bytes())
+		if !brainpool.IsOnCurve(px, py) {
+			return nil, errors.New("ecka: peer pubkey is not on the curve")
+		}
+		zx, zy := brainpool.ScalarMult(px, py, k.bp.d.Bytes())
 		if zx.Sign() == 0 && zy.Sign() == 0 {
 			return nil, errors.New("ecka: ECDH produced the point at infinity")
 		}
-		byteLen := (k.bp.curve.Params().BitSize + 7) / 8
-		z := make([]byte, byteLen)
+		z := make([]byte, brainpoolByteLen)
 		zx.FillBytes(z)
 		return kdf.X963SHA256(z, sharedInfo, keyLen)
 	default:
@@ -117,9 +118,9 @@ func (k *PrivateKey) DeriveBytes(peerPublic, sharedInfo []byte, keyLen int) ([]b
 // randScalar returns a uniform private scalar in [1, n-1]. It draws a
 // few extra bytes beyond the modulus and reduces, the standard trick
 // (FIPS 186-4 Appendix B.4.1) for keeping the modular bias negligible.
-func randScalar(n *big.Int, rng io.Reader) (*big.Int, error) {
+func randScalar(n *big.Int) (*big.Int, error) {
 	b := make([]byte, (n.BitLen()+7)/8+8)
-	if _, err := io.ReadFull(rng, b); err != nil {
+	if _, err := rand.Read(b); err != nil {
 		return nil, err
 	}
 	d := new(big.Int).SetBytes(b)
@@ -130,34 +131,29 @@ func randScalar(n *big.Int, rng io.Reader) (*big.Int, error) {
 }
 
 // marshalUncompressed encodes (x, y) as 0x04 || X || Y with each
-// coordinate fixed to the curve's byte length.
-func marshalUncompressed(c elliptic.Curve, x, y *big.Int) []byte {
-	byteLen := (c.Params().BitSize + 7) / 8
-	out := make([]byte, 1+2*byteLen)
+// brainpoolP256r1 coordinate fixed to its byte length.
+func marshalUncompressed(x, y *big.Int) []byte {
+	out := make([]byte, 1+2*brainpoolByteLen)
 	out[0] = 0x04
-	x.FillBytes(out[1 : 1+byteLen])
-	y.FillBytes(out[1+byteLen:])
+	x.FillBytes(out[1 : 1+brainpoolByteLen])
+	y.FillBytes(out[1+brainpoolByteLen:])
 	return out
 }
 
-// unmarshalUncompressed parses an uncompressed X9.63 point and verifies
-// it lies on c. It rejects compressed/hybrid encodings, wrong lengths,
-// out-of-range coordinates (via IsOnCurve), and the point at infinity.
-func unmarshalUncompressed(c elliptic.Curve, data []byte) (x, y *big.Int, err error) {
-	byteLen := (c.Params().BitSize + 7) / 8
-	if len(data) != 1+2*byteLen {
-		return nil, nil, fmt.Errorf("ecka: peer pubkey: wrong length %d, want %d", len(data), 1+2*byteLen)
+// parseUncompressed parses an uncompressed X9.63 brainpoolP256r1 point.
+// It rejects compressed/hybrid encodings, wrong lengths, and the point
+// at infinity. The caller must still check the point is on the curve.
+func parseUncompressed(data []byte) (x, y *big.Int, err error) {
+	if len(data) != 1+2*brainpoolByteLen {
+		return nil, nil, fmt.Errorf("ecka: peer pubkey: wrong length %d, want %d", len(data), 1+2*brainpoolByteLen)
 	}
 	if data[0] != 0x04 {
 		return nil, nil, fmt.Errorf("ecka: peer pubkey: unsupported point format 0x%02x (want uncompressed 0x04)", data[0])
 	}
-	x = new(big.Int).SetBytes(data[1 : 1+byteLen])
-	y = new(big.Int).SetBytes(data[1+byteLen:])
+	x = new(big.Int).SetBytes(data[1 : 1+brainpoolByteLen])
+	y = new(big.Int).SetBytes(data[1+brainpoolByteLen:])
 	if x.Sign() == 0 && y.Sign() == 0 {
 		return nil, nil, errors.New("ecka: peer pubkey is the point at infinity")
-	}
-	if !c.IsOnCurve(x, y) {
-		return nil, nil, errors.New("ecka: peer pubkey is not on the curve")
 	}
 	return x, y, nil
 }
