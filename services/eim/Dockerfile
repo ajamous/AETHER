@@ -22,7 +22,7 @@ RUN cd services/eim && \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
       -o /out/eim ./cmd/eim
 
-FROM alpine:3.23
+FROM alpine:3.24
 RUN addgroup -S aether && adduser -S aether -G aether
 COPY --from=build /out/eim /usr/local/bin/eim
 USER aether
