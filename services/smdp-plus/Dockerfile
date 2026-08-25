@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY services/smdp-plus/go.mod ./services/smdp-plus/
 COPY services/hsm-broker/go.mod services/hsm-broker/go.sum ./services/hsm-broker/
