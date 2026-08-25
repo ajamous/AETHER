@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY services/profile-builder/go.mod services/profile-builder/go.sum ./services/profile-builder/
 COPY services/hsm-broker/go.mod services/hsm-broker/go.sum ./services/hsm-broker/
