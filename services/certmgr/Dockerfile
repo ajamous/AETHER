@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY services/certmgr/go.mod ./services/certmgr/
 COPY pkg/crypto/go.mod ./pkg/crypto/

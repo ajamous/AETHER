@@ -5,7 +5,7 @@
 # lab compose layer rather than baked in here, since production
 # deployments swap in a different PKCS#11 library.
 
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 
 # build-base brings in gcc + musl-dev; required because the softhsm

@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY services/audit/go.mod ./services/audit/
 COPY services/profile-builder/go.mod services/profile-builder/go.sum ./services/profile-builder/
