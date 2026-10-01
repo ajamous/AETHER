@@ -7,6 +7,7 @@ COPY pkg/crypto/go.mod ./pkg/crypto/
 COPY pkg/asn1/sgp22/go/go.mod ./pkg/asn1/sgp22/go/
 COPY pkg/hsmclient/go.mod ./pkg/hsmclient/
 COPY pkg/certmgrclient/go.mod ./pkg/certmgrclient/
+COPY pkg/pbclient/go.mod ./pkg/pbclient/
 COPY pkg/saip/go.mod ./pkg/saip/
 
 RUN cd services/smdp-plus && go mod download
