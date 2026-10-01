@@ -1,59 +1,95 @@
+import type { Metadata } from 'next';
 import { Shell } from '@/components/Shell';
-import { Card, Empty } from '@/components/Card';
+import {
+  Badge,
+  Card,
+  Empty,
+  Mono,
+  NotYet,
+  PageHeader,
+  Table,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Time,
+  Tr,
+  Unreachable,
+} from '@/components/ui';
 import { fetchSMDSEvents } from '@/lib/api';
+
+export const metadata: Metadata = { title: 'Discovery service' };
 
 export default async function SMDSPage() {
   const data = await fetchSMDSEvents();
+  const now = Date.now();
 
   return (
     <Shell>
-      <h1 className="text-2xl font-semibold mb-2">Discovery service</h1>
-      <p className="text-sm text-zinc-500 mb-6">
-        Pending profile events the SM-DS has registered for devices. SGP.22 §5.5.
-      </p>
+      <PageHeader
+        title="Discovery service"
+        description="Profile events the SM-DS holds for devices until their LPA polls for them (SGP.22 §5.5)."
+      />
 
-      <Card title={`Registered events${data ? ` (${data.length})` : ''}`}>
+      <Card
+        title="Registered events"
+        description={data ? `${data.length} pending` : undefined}
+        flush
+      >
         {!data ? (
-          <Empty message="smds unreachable via gateway" />
+          <Unreachable service="the SM-DS" hint="The console reaches it through the gateway." />
         ) : data.events.length === 0 ? (
-          <Empty message="No pending events. Register one via POST /gsma/rsp2/es12/registerEvent on the smds service." />
+          <Empty
+            title="No pending events"
+            hint={
+              <>
+                An SM-DP+ registers one with <code>POST /gsma/rsp2/es12/registerEvent</code> on the
+                smds service.
+              </>
+            }
+          />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-zinc-500 dark:text-zinc-400">
-              <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className="py-2 pr-4 font-medium">EID</th>
-                <th className="py-2 pr-4 font-medium">Event ID</th>
-                <th className="py-2 pr-4 font-medium">SM-DP+</th>
-                <th className="py-2 pr-4 font-medium">Registered</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono">
+          <Table label="Registered SM-DS events">
+            <THead>
+              <Th>EID</Th>
+              <Th>Event ID</Th>
+              <Th>SM-DP+ address</Th>
+              <Th>Registered</Th>
+            </THead>
+            <TBody>
               {data.events.map((e) => (
-                <tr
-                  key={e.eid + e.event_id}
-                  className="border-b border-zinc-100 dark:border-zinc-800/50"
-                >
-                  <td className="py-2 pr-4 text-xs">{e.eid}</td>
-                  <td className="py-2 pr-4 text-xs">{e.event_id}</td>
-                  <td className="py-2 pr-4 text-xs">{e.rsp_server_address}</td>
-                  <td className="py-2 pr-4 text-xs">
-                    {new Date(e.registered_at).toISOString()}
-                  </td>
-                </tr>
+                <Tr key={e.eid + e.event_id}>
+                  <Td>
+                    <Mono>{e.eid}</Mono>
+                  </Td>
+                  <Td>
+                    <Mono>{e.event_id}</Mono>
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      <Mono>{e.rsp_server_address}</Mono>
+                      {e.forwarding && <Badge tone="info">forwarded</Badge>}
+                    </div>
+                  </Td>
+                  <Td className="text-zinc-600 dark:text-zinc-400">
+                    <Time iso={e.registered_at} now={now} />
+                  </Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
       </Card>
 
-      <Card title="What's missing">
-        <ul className="text-sm list-disc list-inside text-zinc-600 dark:text-zinc-300 space-y-1">
-          <li>Postgres-backed event persistence (in-memory today)</li>
-          <li>Alternative SM-DS / cascade lookups</li>
-          <li>HTTPS + mTLS</li>
-          <li>Push notification channel (vs polling)</li>
-        </ul>
-      </Card>
+      <div className="mt-6">
+        <NotYet
+          items={[
+            'Alternative SM-DS / cascade lookups',
+            'Push notification to devices (LPAs poll today)',
+            'LPA-side verification against the SM-DS identity certificate',
+          ]}
+        />
+      </div>
     </Shell>
   );
 }

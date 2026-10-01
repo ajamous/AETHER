@@ -1,14 +1,51 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  color-scheme: light dark;
+/*
+ * Tailwind v4 reads its design tokens from CSS, not from
+ * tailwind.config.ts. Everything the console uses beyond the stock
+ * palette is declared here.
+ */
+@theme {
+  /* Aether's accent — calm indigo, no marketing brand-energy. */
+  --color-accent-50: #eef2ff;
+  --color-accent-100: #e0e7ff;
+  --color-accent-200: #c7d2fe;
+  --color-accent-300: #a5b4fc;
+  --color-accent-400: #818cf8;
+  --color-accent-500: #6366f1;
+  --color-accent-600: #4f46e5;
+  --color-accent-700: #4338ca;
+  --color-accent-900: #312e81;
+  --color-accent-950: #1e1b4b;
+
+  /* Page and surface colours for the dark theme. */
+  --color-ink-950: #0b0d11;
+  --color-ink-900: #11141a;
+  --color-ink-800: #1a1e26;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
   body {
-    background: #0b0d11;
-    color: #e7e9ee;
+    @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-ink-950 dark:text-zinc-100;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+
+  /* One focus style everywhere, visible in both themes. */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-500;
+  }
+
+  code,
+  kbd,
+  samp {
+    @apply font-mono;
   }
 }

@@ -1,60 +1,111 @@
+import type { Metadata } from 'next';
 import { Shell } from '@/components/Shell';
-import { Card, Empty } from '@/components/Card';
+import {
+  Badge,
+  Card,
+  Empty,
+  Mono,
+  NotYet,
+  PageHeader,
+  Table,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Time,
+  Tr,
+  Unreachable,
+} from '@/components/ui';
 import { fetchIoTDevices } from '@/lib/api';
+import { lastSeenTone } from '@/lib/format';
+
+export const metadata: Metadata = { title: 'IoT devices' };
 
 export default async function EIMPage() {
   const data = await fetchIoTDevices();
+  const now = Date.now();
 
   return (
     <Shell>
-      <h1 className="text-2xl font-semibold mb-2">IoT devices (eIM)</h1>
-      <p className="text-sm text-zinc-500 mb-6">
-        Registered IoT devices and their last seen time. SGP.32 §eIM.
-      </p>
+      <PageHeader
+        title="IoT devices"
+        description="Devices registered with the eIM and when their IPA last polled for commands (SGP.32)."
+      />
 
-      <Card title={`Registered devices${data ? ` (${data.length})` : ''}`}>
+      <Card
+        title="Registered devices"
+        description={data ? `${data.length} registered` : undefined}
+        flush
+      >
         {!data ? (
-          <Empty message="eim unreachable via gateway" />
+          <Unreachable service="the eIM" hint="The console reaches it through the gateway." />
         ) : data.devices.length === 0 ? (
-          <Empty message="No devices registered. POST one to /v1/devices on the eim service." />
+          <Empty
+            title="No devices registered"
+            hint={
+              <>
+                Register one with <code>POST /v1/devices</code> on the eim service.
+              </>
+            }
+          />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-left text-zinc-500 dark:text-zinc-400">
-              <tr className="border-b border-zinc-200 dark:border-zinc-800">
-                <th className="py-2 pr-4 font-medium">EID</th>
-                <th className="py-2 pr-4 font-medium">Label</th>
-                <th className="py-2 pr-4 font-medium">Tags</th>
-                <th className="py-2 pr-4 font-medium">Registered</th>
-                <th className="py-2 pr-4 font-medium">Last seen</th>
-              </tr>
-            </thead>
-            <tbody className="font-mono">
+          <Table label="Registered IoT devices">
+            <THead>
+              <Th>Device</Th>
+              <Th>Last seen</Th>
+              <Th>EID</Th>
+              <Th>Tags</Th>
+              <Th>Registered</Th>
+            </THead>
+            <TBody>
               {data.devices.map((d) => (
-                <tr key={d.eid} className="border-b border-zinc-100 dark:border-zinc-800/50">
-                  <td className="py-2 pr-4 text-xs">{d.eid}</td>
-                  <td className="py-2 pr-4 text-xs">{d.label || '—'}</td>
-                  <td className="py-2 pr-4 text-xs">{(d.tags || []).join(', ') || '—'}</td>
-                  <td className="py-2 pr-4 text-xs">
-                    {new Date(d.registered_at).toISOString()}
-                  </td>
-                  <td className="py-2 pr-4 text-xs">
-                    {d.last_seen ? new Date(d.last_seen).toISOString() : 'never'}
-                  </td>
-                </tr>
+                <Tr key={d.eid}>
+                  <Td className="font-medium text-zinc-900 dark:text-zinc-100">
+                    {d.label || (
+                      <span className="font-normal text-zinc-500 dark:text-zinc-400">
+                        Unlabelled
+                      </span>
+                    )}
+                  </Td>
+                  <Td>
+                    <Badge tone={lastSeenTone(d.last_seen, now)} dot>
+                      {d.last_seen ? <Time iso={d.last_seen} now={now} /> : 'Never'}
+                    </Badge>
+                  </Td>
+                  <Td>
+                    <Mono>{d.eid}</Mono>
+                  </Td>
+                  <Td>
+                    {d.tags && d.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {d.tags.map((t) => (
+                          <Badge key={t}>{t}</Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </Td>
+                  <Td className="text-zinc-600 dark:text-zinc-400">
+                    <Time iso={d.registered_at} now={now} />
+                  </Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
         )}
       </Card>
 
-      <Card title="What's missing">
-        <ul className="text-sm list-disc list-inside text-zinc-600 dark:text-zinc-300 space-y-1">
-          <li>Per-device command queue view + UI to enqueue commands</li>
-          <li>IPAe (indirect) profile flow</li>
-          <li>Authenticated transport between eIM and IPA (mTLS / signed commands)</li>
-          <li>Bulk operations</li>
-        </ul>
-      </Card>
+      <div className="mt-6">
+        <NotYet
+          items={[
+            'Per-device command queue view, and enqueueing commands from the console',
+            'IPAe (indirect) profile flow',
+            'Authenticated eIM ↔ IPA transport (mTLS / signed commands)',
+            'Bulk operations',
+          ]}
+        />
+      </div>
     </Shell>
   );
 }
