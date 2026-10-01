@@ -1,6 +1,6 @@
 # ui/admin
 
-The Aether operator console. Next.js 14 (App Router), React 18, Tailwind CSS.
+The Aether operator console. Next.js 16 (App Router), React 19, Tailwind CSS 4.
 
 ## Status
 
@@ -97,6 +97,22 @@ npm run start
 
 The Next.js `output: 'standalone'` build produces a self-contained
 runtime under `.next/standalone/` suitable for the Dockerfile.
+
+## Design
+
+- **Tokens** live in `app/globals.css` under `@theme` (Tailwind v4 reads
+  them from CSS; there is no `tailwind.config.ts`). The accent colour is
+  `accent-*`; dark surfaces are `ink-*`. Light and dark follow the OS
+  setting.
+- **Components** live in `components/ui.tsx` (page header, card, stat
+  tile, badge, table, empty / unreachable states) and
+  `components/icons.tsx` (inline SVG icons). Pages compose these rather
+  than styling from scratch.
+- **Status is never colour-only.** Badges always carry a text label;
+  the colour reinforces it.
+- **Rendering:** every route renders per request (`dynamic =
+  'force-dynamic'` in `app/layout.tsx`), because auth state comes from
+  runtime env and the session.
 
 ## Tests
 
