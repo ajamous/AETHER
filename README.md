@@ -18,7 +18,9 @@ sysmoEUICC test card. We are not there yet — see Status below.
 
 ## Status
 
-This project is in **Phase 0** (foundation). Nothing here is production-ready.
+This project is working toward its **Phase 1** milestone (a profile installed on a real
+sysmoEUICC test card); see [ROADMAP.md](ROADMAP.md) for the per-phase view. Nothing here
+is production-ready.
 The table below is the source of truth.
 
 | Component                     | Status        | Notes                                              |
@@ -36,7 +38,7 @@ The table below is the source of truth.
 | `services/profile-builder`    | Partial       | YAML template loader + UPP envelope + real DER-encoded SAIP via `pkg/saip` carrying the subscriber's IMSI/PLMN (PE-USIM) and Milenage Ki/OPc (PE-AKAParameter); richer ProfileElements land as `pkg/saip` grows |
 | `services/audit`              | Implemented   | Hash-chained ledger with verify, in-memory and Postgres-backed stores; serializable concurrent appends verified; signed timeline anchors at `/v1/anchor` (ECDSA-SHA-256 over DER-encoded `(timestamp, length, tail_hash)` SEQUENCE; opt-in via `--hsm-broker`); offline auditor CLI under `tools/aether-verify-anchor/` (`make verify-anchor`) |
 | `services/gateway`            | Implemented   | ES2+ shapes + REST proxy + HTTPS + verified-client-cert mTLS on /gsma/rsp2/es2plus/* (path-scoped) + per-source-IP token-bucket rate limiter on /gsma/rsp2/* + Bearer-token OIDC on /v1/* admin paths (RS256 + ES256, JWKS cache, /v1/health and /metrics bypass). ES2+ DownloadOrder forwards to smdp-plus `/v1/profiles/prepare` when the order carries subscriber data. All security flags opt-in; lab default disabled |
-| `ui/admin`                    | Partial       | Next.js 15 read-only console with Auth.js OIDC sign-in (lab bypass with banner when unconfigured); dashboard, templates, certs, SM-DS, eIM, audit |
+| `ui/admin`                    | Partial       | Next.js 16 read-only console with Auth.js OIDC sign-in (lab bypass with banner when unconfigured); dashboard, templates, certs, SM-DS, eIM, audit. Automated axe-core pass clean; no formal accessibility audit yet |
 | Lab Docker Compose            | Implemented   | `make lab-up` brings up the full stack; smoke tests under `test/e2e` |
 | Conformance harness (SGP.23)  | Implemented   | `make conformance` runs 92 cases across 10 families; coverage matrix in `tools/conformance/coverage/sgp23.md`; hardware-in-the-loop tests honestly out of scope |
 | Cloud HSM backends            | Implemented (PKCS#11) | One PKCS#11 backend exercised end-to-end against SoftHSM v2 in CI; `docs/sas-sm/hsm-vendors.md` documents the per-vendor plumbing for AWS CloudHSM, GCP Cloud HSM (KMS PKCS#11), Azure Managed HSM, Thales Luna, and Utimaco SecurityServer. Per-vendor hardware-in-the-loop verification stays an honest follow-up bench |
