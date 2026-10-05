@@ -26,6 +26,13 @@ resource "azurerm_kubernetes_cluster" "this" {
   oidc_issuer_enabled       = true
   workload_identity_enabled = true
 
+  # Required from azurerm v5. "Manual" keeps the node pool below, scaled
+  # by the cluster autoscaler; "Auto" would hand provisioning to AKS
+  # node auto-provisioning instead.
+  node_provisioning_profile {
+    mode = "Manual"
+  }
+
   default_node_pool {
     name                         = "system"
     vm_size                      = var.node_vm_size
