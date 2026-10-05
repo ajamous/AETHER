@@ -21,10 +21,12 @@ resource "azurerm_subnet" "aks" {
   virtual_network_name = azurerm_virtual_network.this.name
   address_prefixes     = [var.aks_subnet_cidr]
 
-  service_endpoints = [
-    "Microsoft.KeyVault",
-    "Microsoft.Storage",
-  ]
+  service_endpoint {
+    service = "Microsoft.KeyVault"
+  }
+  service_endpoint {
+    service = "Microsoft.Storage"
+  }
 }
 
 resource "azurerm_subnet" "data" {
@@ -52,11 +54,10 @@ resource "azurerm_private_dns_zone" "postgres" {
 }
 
 resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
-  name                  = "${var.name_prefix}-postgres-link"
-  resource_group_name   = var.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
-  virtual_network_id    = azurerm_virtual_network.this.id
-  tags                  = var.tags
+  name                = "${var.name_prefix}-postgres-link"
+  private_dns_zone_id = azurerm_private_dns_zone.postgres.id
+  virtual_network_id  = azurerm_virtual_network.this.id
+  tags                = var.tags
 }
 
 # NSG with default-deny inbound from internet; AKS nodes get
