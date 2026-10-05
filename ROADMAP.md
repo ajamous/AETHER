@@ -6,12 +6,27 @@ links current work to it.
 
 ## Where we are
 
-**Phase 0 — Foundation.** Repo bootstrap, license, governance, CI
-scaffolding, documentation skeleton, ASN.1 toolchain.
+Work has run ahead of the phase order: Phase 1 is close to its
+milestone and parts of Phases 2–7 have landed. No phase is called done
+until its milestone is reproduced (see the disclaimers below). The
+README status table is the per-component source of truth; this is the
+per-phase view.
+
+| Phase | State | What's left |
+| ----- | ----- | ----------- |
+| 0 — Foundation | Mostly done | SGP.22 ASN.1 modules are not vendored yet (`pkg/asn1/sgp22/modules/` is empty; vendoring GSMA spec text needs a licensing decision). CI builds, tests, lints, and builds every image; SBOMs are produced at release time only, and there is no container image scan |
+| 1 — Consumer SM-DP+ MVP | In progress (current focus) | Every BPP layer is built and tested in software. For a real card: further SAIP ProfileElements (PE-PinCodes, PE-FileSystem, TCA §B framing), the per-segment AAD layout checked on hardware, and the device E2E. **Milestone not yet reached** |
+| 2 — Admin UI | Partial | Read-only console with OIDC sign-in. No profile activation flow, live updates, or Storybook; no formal WCAG 2.1 AA audit (an automated axe-core pass is clean) |
+| 3 — SM-DS | Partial | ES11 + ES12 discovery with signed ServerSigned1. Root / Alternative SM-DS roles and zero-touch activation not started |
+| 4 — IoT (SGP.32) | Skeleton | eIM device registry and command queue. IPAe / IPAd flows, fleet UI, bulk ops not started |
+| 5 — Production crypto | Partial | One PKCS#11 backend verified against SoftHSM; per-vendor configuration documented. Per-vendor hardware verification and cert rotation tooling pending; key ceremony is documented |
+| 6 — Conformance & hardening | Partial | SGP.23 harness (92 cases) and DR runbook in place. No fuzzing yet; pen tests and the mock SAS-SM audit not started |
+| 7 — Production references | Partial | Terraform (AWS, GCP, Azure), Helm chart, and SAS-SM evidence templates in place. No pilot deployments yet |
+| 8 — Ecosystem | Not started | |
 
 ## Phases
 
-### Phase 0 — Foundation (current)
+### Phase 0 — Foundation
 
 - Repo bootstrap (license, CoC, contributing, security, governance)
 - Build tooling (Makefile, Go workspace, lint configs)

@@ -345,6 +345,44 @@ jobs:
       - name: terraform validate (examples/full)
         run: terraform -chdir=deployments/terraform/${{ matrix.cloud }}/examples/full validate
 
+  # Build every image the lab stack and Helm chart run. Nothing else in
+  # CI builds them, which is how the smdp-plus image went unbuildable
+  # for four months (missing pkg/pbclient go.mod COPY; fixed in #113).
+  images:
+    name: image build (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - audit
+          - certmgr
+          - eim
+          - gateway
+          - hsm-broker
+          - profile-builder
+          - smdp-plus
+          - smds
+          - ui-admin
+    steps:
+      - uses: actions/checkout@v7
+      - name: docker build
+        run: |
+          if [ "${{ matrix.image }}" = ui-admin ]; then
+            dockerfile=ui/admin/Dockerfile
+          else
+            dockerfile=services/${{ matrix.image }}/Dockerfile
+          fi
+          # Same context as deployments/docker-compose/lab.yml: the repo root.
+          docker build -f "$dockerfile" -t "aether-${{ matrix.image }}:ci" .
+      - name: binary starts
+        if: matrix.image != 'ui-admin'
+        run: |
+          # Every service uses the Go flag package; -h prints usage.
+          out=$(docker run --rm "aether-${{ matrix.image }}:ci" -h 2>&1 || true)
+          echo "$out"
+          echo "$out" | grep -q "^Usage of " || { echo "::error::binary did not start"; exit 1; }
+
   ui:
     name: ui build
     runs-on: ubuntu-latest
