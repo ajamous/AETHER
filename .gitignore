@@ -16,6 +16,9 @@ go.work.sum
 # Node / web
 node_modules/
 .next/
+# Playwright (ui/admin e2e)
+test-results/
+playwright-report/
 .turbo/
 .pnpm-store/
 npm-debug.log*

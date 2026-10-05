@@ -403,6 +403,43 @@ jobs:
         working-directory: ui/admin
         run: npm run build
 
+  ui-e2e:
+    name: ui OIDC end-to-end
+    runs-on: ubuntu-latest
+    services:
+      # A real OIDC provider (discovery, authorization-code + PKCE, JWKS)
+      # with a scriptable login form.
+      idp:
+        image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+        ports:
+          - 8099:8080
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: ui/admin/package-lock.json
+      - name: install
+        working-directory: ui/admin
+        run: npm ci
+      - name: install chromium
+        working-directory: ui/admin
+        run: npx playwright install --with-deps chromium
+      - name: build
+        working-directory: ui/admin
+        run: npm run build
+      - name: wait for the IdP
+        run: |
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:8099/aether/.well-known/openid-configuration >/dev/null && exit 0
+            sleep 1
+          done
+          echo "::error::IdP did not come up"; exit 1
+      - name: sign-in / sign-out round trip
+        working-directory: ui/admin
+        run: npm run test:e2e
+
   docs:
     name: docs build
     runs-on: ubuntu-latest
