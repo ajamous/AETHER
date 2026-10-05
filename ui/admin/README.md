@@ -116,9 +116,24 @@ runtime under `.next/standalone/` suitable for the Dockerfile.
 
 ## Tests
 
-`npm run typecheck` and `npm run lint` are gated in CI. There are no
+`npm run typecheck` and `npm run build` are gated in CI. There are no
 component tests yet; we add Vitest + Testing Library when the first
 non-trivial interactive component lands (search box, profile editor).
+
+`npm run test:e2e` (Playwright, `e2e/`) drives a full OIDC round trip
+against a real provider: redirect to `/signin`, sign-in at the IdP,
+the dashboard as the signed-in operator, the id_token forwarded to the
+gateway as a Bearer, and sign-out. CI runs it as the `ui OIDC
+end-to-end` job. Locally:
+
+```
+docker run -d -p 8099:8080 ghcr.io/navikt/mock-oauth2-server:2.1.10
+npm run build
+npx playwright install chromium   # once
+npm run test:e2e
+```
+
+The test starts the console (in OIDC mode) and a fake gateway itself.
 
 ## Notes on data fetching
 
